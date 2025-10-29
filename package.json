@@ -5,7 +5,13 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon",
+    "dev": "nodemon src/server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop lafi-backend",
+    "pm2:restart": "pm2 restart lafi-backend",
+    "pm2:delete": "pm2 delete lafi-backend",
+    "pm2:logs": "pm2 logs lafi-backend",
+    "pm2:monit": "pm2 monit",
     "seed": "node src/scripts/seed-users.js",
     "create-admin": "node src/scripts/create-admin.js"
   },
@@ -40,6 +46,6 @@
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }
