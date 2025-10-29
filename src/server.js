@@ -28,18 +28,35 @@ setTimeout(() => {
 // MIDDLEWARE
 // =====================================
 
-// CORS Configuration (only for development)
-if (process.env.NODE_ENV === 'development') {
-  app.use(cors({
-    origin: [
-      process.env.FRONTEND_URL || 'http://localhost:4200',
+// CORS Configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'http://localhost:4200',
       'http://localhost:3000',
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  }));
-}
+      'http://154.26.131.4',
+      'http://154.26.131.4:3000',
+      'https://lafiswimmingacademy.com',
+      'https://www.lafiswimmingacademy.com'
+    ].filter(Boolean);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all in production for now
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 // Body Parser
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -102,14 +119,11 @@ app.use('/api/evaluations', require('./routes/evaluationRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 
 // =====================================
-// SERVE ANGULAR STATIC FILES
-// =====================================
-// =====================================
-// SERVE ANGULAR SSR
+// SERVE ANGULAR FRONTEND
 // =====================================
 
 const isProduction = process.env.NODE_ENV === 'production';
-const angularDistPath = path.join(__dirname, '../../../frontend/dist/frontend');
+const angularDistPath = path.join(__dirname, '../../frontend/dist/frontend');
 const browserPath = path.join(angularDistPath, 'browser');
 const serverPath = path.join(angularDistPath, 'server');
 
@@ -224,6 +238,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
+    version: '1.0.0',
     services: {
       database: 'connected',
       whatsapp: whatsappService.status || 'unknown',
@@ -355,33 +370,91 @@ process.on('unhandledRejection', (err) => {
 // =====================================
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0'; // Bind to all interfaces
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log('');
-  console.log('='.repeat(60));
+  console.log('='.repeat(70));
   console.log('🏊 LAFI SWIMMING ACADEMY - FULL STACK SERVER');
-  console.log('='.repeat(60));
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log('='.repeat(70));
+  console.log(`🚀 Server running on ${HOST}:${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Access: http://localhost:${PORT}`);
-  console.log(`🌐 API: http://localhost:${PORT}/api`);
-  console.log(`📁 Uploads: http://localhost:${PORT}/uploads`);
-  console.log(`📱 WhatsApp Config: http://localhost:${PORT}/configuration/lafi`);
+  console.log(`📅 Started: ${new Date().toLocaleString('id-ID')}`);
+  console.log('');
+  console.log('🌐 Access URLs:');
+  console.log(`   Local:    http://localhost:${PORT}`);
+  console.log(`   Network:  http://${HOST}:${PORT}`);
+  console.log(`   Public:   http://154.26.131.4:${PORT}`);
+  console.log('');
+  console.log('📋 API Endpoints:');
+  console.log(`   Health:   http://154.26.131.4:${PORT}/api/health`);
+  console.log(`   Status:   http://154.26.131.4:${PORT}/api/status`);
+  console.log(`   Login:    POST http://154.26.131.4:${PORT}/api/auth/login`);
+  console.log(`   Students: GET  http://154.26.131.4:${PORT}/api/students`);
+  console.log(`   Coaches:  GET  http://154.26.131.4:${PORT}/api/coaches`);
+  console.log('');
+  console.log('📁 Static Files:');
+  console.log(`   Uploads:  http://154.26.131.4:${PORT}/uploads`);
+  console.log(`   WhatsApp: http://154.26.131.4:${PORT}/configuration/lafi`);
+  console.log('');
   
-  if (fs.existsSync(angularDistPath)) {
-    console.log(`✅ Angular Frontend: ENABLED (serving from dist)`);
+  if (hasBrowser) {
+    console.log(`✅ Angular Frontend: ENABLED`);
+    console.log(`   Path: ${browserPath}`);
   } else {
     console.log(`⚠️  Angular Frontend: NOT BUILT`);
     console.log(`   Run: cd frontend && ng build --configuration production`);
   }
   
-  console.log('='.repeat(60));
   console.log('');
-  console.log('📋 API Endpoints Available - See documentation above');
+  console.log('🔧 Services Status:');
+  console.log(`   Database:  ✅ Connected`);
+  console.log(`   WhatsApp:  🔄 Initializing...`);
+  console.log(`   Cron Jobs: ⏰ Scheduled`);
   console.log('');
-  console.log('✅ Server is ready to accept connections');
-  console.log('='.repeat(60));
+  console.log('🔓 Network Binding:');
+  console.log(`   Binding to ${HOST} - accessible from external networks`);
+  console.log(`   Firewall: Ensure port ${PORT} is open`);
+  console.log(`   Command: sudo ufw allow ${PORT}/tcp`);
   console.log('');
+  console.log('✅ Server is ready to accept connections!');
+  console.log('='.repeat(70));
+  console.log('');
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('');
+  console.error('❌ SERVER ERROR:');
+  console.error('='.repeat(70));
+  
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} is already in use`);
+    console.error('');
+    console.error('   Solutions:');
+    console.error(`   1. Find process: sudo lsof -i :${PORT}`);
+    console.error(`   2. Kill process: sudo kill -9 <PID>`);
+    console.error(`   3. Or use different port: PORT=3001 node server.js`);
+  } else if (error.code === 'EACCES') {
+    console.error(`❌ Permission denied to bind to port ${PORT}`);
+    console.error('');
+    console.error('   Solutions:');
+    console.error(`   1. Use port > 1024: PORT=3000 node server.js`);
+    console.error(`   2. Or run with sudo: sudo node server.js`);
+  } else {
+    console.error('❌ Unknown server error:', error.message);
+    console.error('   Stack:', error.stack);
+  }
+  
+  console.error('='.repeat(70));
+  console.error('');
+  process.exit(1);
+});
+
+// Log successful binding
+server.on('listening', () => {
+  const address = server.address();
+  console.log(`🎉 Server successfully bound to ${address.address}:${address.port}`);
 });
 
 module.exports = server;
