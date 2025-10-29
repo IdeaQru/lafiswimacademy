@@ -1,0 +1,14 @@
+{
+  "verbose": false,
+  "watch": ["src"],
+  "ignore": [
+    "sessions/**",
+    "sessions/*",
+    "*.log",
+    "node_modules/**",
+    "public/**"
+  ],
+  "ext": "js",
+  "exec": "node src/server.js",
+  "delay": 1000
+}

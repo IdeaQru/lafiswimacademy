@@ -1,0 +1,2 @@
+import './polyfills.server.mjs';
+var o=()=>{if(typeof window<"u"&&window.location){let t=window.location.hostname;return t==="localhost"||t==="127.0.0.1"?"http://localhost:3000/api":`https://${t}:3000/api`}return"https://lafiswimming.academy:3000/api"},i=()=>{if(typeof window<"u"&&window.location){let{protocol:t,hostname:n}=window.location;return n==="localhost"||n==="127.0.0.1"?"http://localhost:3000":`${t}//${n}:3000`}return"https://lafiswimming.academy:3000"},e={production:!0,apiUrl:o(),frontendUrl:i(),waApiKey:"lafi_swimming_wa_2025_secret_key"};export{e as a};

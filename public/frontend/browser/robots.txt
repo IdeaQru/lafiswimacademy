@@ -1,0 +1,17 @@
+# robots.txt for Lafi Swimming Academy
+User-agent: *
+Allow: /
+
+# Disallow admin pages
+Disallow: /admin/
+Disallow: /login
+Disallow: /dashboard/
+
+# Disallow private API endpoints
+Disallow: /api/
+
+# Allow all other pages
+Allow: /
+
+# Sitemap location
+Sitemap: https://yoursite.com/sitemap.xml
