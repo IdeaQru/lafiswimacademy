@@ -140,9 +140,12 @@ exports.registerFirstAdmin = async (req, res) => {
   try {
     const { username, email, phone, fullName, password } = req.body;
 
+    console.log('📝 Register first admin attempt:', { username, email, phone });
+
     // Check if admin already exists
     const existingAdmin = await User.findOne({ role: 'admin' });
     if (existingAdmin) {
+      console.log('⚠️ Admin already exists');
       return res.status(400).json({ 
         success: false, 
         message: 'Admin sudah terdaftar. Gunakan endpoint user management.' 
@@ -157,19 +160,17 @@ exports.registerFirstAdmin = async (req, res) => {
       });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create first admin
+    // Create first admin (password will be auto-hashed by pre-save hook)
     const admin = await User.create({ 
-      username, 
+      username: username.toLowerCase(), 
       email,
       phone, 
       fullName: fullName || 'Super Admin',
       role: 'admin', 
-      password: hashedPassword 
+      password: password  // Plain password - will be hashed automatically
     });
+
+    console.log('✅ Admin created:', admin.username);
 
     // Generate token
     const token = jwt.sign(
@@ -194,10 +195,14 @@ exports.registerFirstAdmin = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Register first admin error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Register first admin error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
+
 
 exports.register = async (req, res) => {
   try {
