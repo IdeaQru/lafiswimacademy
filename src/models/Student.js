@@ -7,7 +7,6 @@ const studentSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Student ID is required'],
     unique: true,
-    index: true
   },
   fullName: {
     type: String,
