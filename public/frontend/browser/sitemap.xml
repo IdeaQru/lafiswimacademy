@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+                            http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+  
+  <!-- Homepage -->
+  <url>
+    <loc>https://lafiswimmingacademy.com/</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangefrereq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  
+  <!-- Main Pages -->
+  <url>
+    <loc>https://lafiswimmingacademy.com/home</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangegefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/about</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/programs</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangefrereq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/coaches</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangefrereq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/schedule</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangefrereq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/gallery</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangefrereq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/contact</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/news</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  
+  <!-- Authentication Pages (optional - bisa dihapus jika tidak ingin diindex) -->
+  <!-- 
+  <url>
+    <loc>https://lafiswimmingacademy.com/login</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangefrereq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  -->
+  
+  <!-- Location Pages (SEO untuk area layanan) -->
+  <url>
+    <loc>https://lafiswimmingacademy.com/location/surabaya</loc>
+    <lastmod>2025-10-29</lastmod>
+    hangefreqeq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/location/sidoarjo</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>https://lafiswimmingacademy.com/location/gresik</loc>
+    <lastmod>2025-10-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>

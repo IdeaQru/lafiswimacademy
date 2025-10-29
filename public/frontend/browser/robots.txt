@@ -1,17 +1,24 @@
-# robots.txt for Lafi Swimming Academy
+# Lafi Swimming Academy - Robots.txt
+
 User-agent: *
 Allow: /
-
-# Disallow admin pages
 Disallow: /admin/
-Disallow: /login
+Disallow: /login/
 Disallow: /dashboard/
-
-# Disallow private API endpoints
 Disallow: /api/
 
-# Allow all other pages
-Allow: /
+# Crawl-delay untuk bot yang agresif
+Crawl-delay: 1
 
-# Sitemap location
-Sitemap: https://yoursite.com/sitemap.xml
+# Sitemap
+Sitemap: https://lafiswimmingacademy.com/sitemap.xml
+
+# Block bad bots (optional)
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
