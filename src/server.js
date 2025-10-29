@@ -123,7 +123,7 @@ app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 // =====================================
 
 const isProduction = process.env.NODE_ENV === 'production';
-const angularDistPath = path.join(__dirname, '../../frontend/dist/frontend');
+const angularDistPath = path.join(__dirname, '../../../frontend/dist/frontend');
 const browserPath = path.join(angularDistPath, 'browser');
 const serverPath = path.join(angularDistPath, 'server');
 
