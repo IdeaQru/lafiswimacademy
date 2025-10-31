@@ -1,6 +1,4 @@
 const mongoose = require('mongoose');
-// models/Student.js
-
 
 const studentSchema = new mongoose.Schema({
   studentId: {
@@ -46,25 +44,24 @@ const studentSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Address is required']
   },
-  emergencyContact: {
+  programType: {
     type: String,
-    required: [true, 'Emergency contact is required'],
-    trim: true
+    enum: ['private', 'semiPrivate', 'group'],
+    required: [true, 'Program type is required']
   },
-  emergencyPhone: {
+  programCategory: {
     type: String,
-    required: [true, 'Emergency phone is required'],
-    match: [/^[0-9]{10,15}$/, 'Emergency phone must be 10-15 digits']
+    enum: ['Aquatike', 'Beginner', 'Teen & Adult', 'Therapy', 'Preschool'],
+    required: [true, 'Program category is required']
   },
-  classLevel: {
+  poolLocation: {
     type: String,
-    enum: ['Baby Swimming', 'Kids Class', 'Teen & Adult', 'Private Training', 'Competition Team'],
-    required: [true, 'Class level is required']
+    required: [true, 'Pool location is required']
   },
-  swimmingAbility: {
+  trainingDay: {
     type: String,
-    enum: ['Belum Bisa', 'Dasar', 'Menengah', 'Mahir'],
-    required: [true, 'Swimming ability is required']
+    enum: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Fleksibel'],
+    required: [true, 'Training day is required']
   },
   healthCondition: {
     type: String,
@@ -73,6 +70,11 @@ const studentSchema = new mongoose.Schema({
   allergies: {
     type: String,
     default: null
+  },
+  knownFrom: {
+    type: String,
+    enum: ['Instagram', 'TikTok', 'Facebook', 'WhatsApp', 'Teman/Keluarga', 'Google', 'Iklan', 'Lainnya'],
+    required: [true, 'Known from source is required']
   },
   photo: {
     type: String,
@@ -87,7 +89,8 @@ const studentSchema = new mongoose.Schema({
     enum: ['Aktif', 'Non-Aktif', 'Cuti'],
     default: 'Aktif'
   },
-  // Payment tracking
+
+  // ==================== PAYMENT TRACKING ====================
   monthlyFee: {
     type: Number,
     default: 0
@@ -118,14 +121,22 @@ const studentSchema = new mongoose.Schema({
   enableReminder: {
     type: Boolean,
     default: true
+  },
+
+  // ==================== CURRENT MONTH PAYMENT ====================
+  currentMonthPayment: {
+    month: String,
+    status: {
+      type: String,
+      enum: ['Paid', 'Pending', 'Overdue'],
+      default: 'Pending'
+    },
+    paidDate: Date,
+    amount: Number
   }
 }, {
   timestamps: true
 });
-
-// Auto-calculate age
-
-
 
 
 // ==================== PRE-SAVE HOOKS ====================
@@ -146,6 +157,7 @@ studentSchema.pre('save', function(next) {
   }
   next();
 });
+
 
 // Auto-update payment status and handle month changes
 studentSchema.pre('save', function(next) {
@@ -217,25 +229,26 @@ studentSchema.pre('save', function(next) {
   next();
 });
 
+
 // ==================== INDEXES ====================
-// Add these indexes at the end of Student schema
+studentSchema.index({ studentId: 1 });
+studentSchema.index({ fullName: 1 });
 studentSchema.index({ registrationDate: 1 });
 studentSchema.index({ status: 1 });
-studentSchema.index({ classLevel: 1 });
-studentSchema.index({ swimmingAbility: 1 });
+studentSchema.index({ programType: 1 });
+studentSchema.index({ programCategory: 1 });
+studentSchema.index({ poolLocation: 1 });
+studentSchema.index({ trainingDay: 1 });
 studentSchema.index({ gender: 1 });
 studentSchema.index({ paymentStatus: 1 });
 studentSchema.index({ age: 1 });
+studentSchema.index({ knownFrom: 1 });
 
-// Compound index for reports
+// Compound indexes for reports
 studentSchema.index({ registrationDate: 1, status: 1 });
 studentSchema.index({ status: 1, paymentStatus: 1 });
-
-// Existing indexes
-studentSchema.index({ studentId: 1 });
-studentSchema.index({ fullName: 1 });
-studentSchema.index({ status: 1 });
-studentSchema.index({ classLevel: 1 });
+studentSchema.index({ status: 1, programType: 1 });
+studentSchema.index({ status: 1, programCategory: 1 });
 
 // Payment-related indexes
 studentSchema.index({ paymentStatus: 1 });
@@ -254,6 +267,7 @@ studentSchema.index({
   'currentMonthPayment.month': 1, 
   'currentMonthPayment.status': 1 
 });
+
 
 // ==================== INSTANCE METHODS ====================
 
@@ -286,6 +300,7 @@ studentSchema.methods.markCurrentMonthPaid = function(amount, paymentDate = new 
   
   console.log(`✅ ${this.fullName} - Payment marked for ${currentMonth}`);
 };
+
 
 // Update payment status (called by cron or manually)
 studentSchema.methods.updatePaymentStatus = function() {
@@ -326,10 +341,36 @@ studentSchema.methods.updatePaymentStatus = function() {
   }
 };
 
+
 // Legacy method - kept for backward compatibility
 studentSchema.methods.markAsPaid = function(paymentDate = new Date()) {
   this.markCurrentMonthPaid(this.monthlyFee, paymentDate);
 };
+
+
+// Get program info
+studentSchema.methods.getProgramInfo = function() {
+  const programs = {
+    private: {
+      type: 'Private Training',
+      participants: '1 Siswa (1-on-1)',
+      price: 'Mulai 750 ribu'
+    },
+    semiPrivate: {
+      type: 'Semi Private',
+      participants: '2-3 Siswa',
+      price: 'Mulai 500 ribu'
+    },
+    group: {
+      type: 'Group Class',
+      participants: '4-5 Siswa',
+      price: 'Mulai 400 ribu'
+    }
+  };
+  
+  return programs[this.programType] || {};
+};
+
 
 // ==================== STATIC METHODS ====================
 
@@ -356,6 +397,7 @@ studentSchema.statics.getOverduePayments = async function() {
   }).sort({ 'currentMonthPayment.status': 1, nextPaymentDue: 1 });
 };
 
+
 // Get students with upcoming payments (next 3 days)
 studentSchema.statics.getUpcomingPayments = async function(days = 3) {
   const today = new Date();
@@ -378,6 +420,72 @@ studentSchema.statics.getUpcomingPayments = async function(days = 3) {
     }
   }).sort({ nextPaymentDue: 1 });
 };
+
+
+// Get students by program type
+studentSchema.statics.getByProgramType = async function(programType) {
+  return this.find({
+    status: 'Aktif',
+    programType: programType
+  }).sort({ registrationDate: -1 });
+};
+
+
+// Get students by program category
+studentSchema.statics.getByProgramCategory = async function(programCategory) {
+  return this.find({
+    status: 'Aktif',
+    programCategory: programCategory
+  }).sort({ registrationDate: -1 });
+};
+
+
+// Get students by training day
+studentSchema.statics.getByTrainingDay = async function(trainingDay) {
+  return this.find({
+    status: 'Aktif',
+    trainingDay: trainingDay
+  }).sort({ fullName: 1 });
+};
+
+
+// Get statistics
+studentSchema.statics.getStatistics = async function() {
+  const stats = await this.aggregate([
+    {
+      $match: { status: 'Aktif' }
+    },
+    {
+      $group: {
+        _id: null,
+        totalActive: { $sum: 1 },
+        byProgramType: {
+          $push: {
+            programType: '$programType',
+            count: 1
+          }
+        },
+        byProgramCategory: {
+          $push: {
+            category: '$programCategory',
+            count: 1
+          }
+        },
+        byTrainingDay: {
+          $push: {
+            day: '$trainingDay',
+            count: 1
+          }
+        },
+        totalMonthlyRevenue: { $sum: '$monthlyFee' },
+        totalUnpaidAmount: { $sum: '$totalUnpaid' }
+      }
+    }
+  ]);
+  
+  return stats[0] || {};
+};
+
 
 // Reset payment status for new month (called by cron job)
 studentSchema.statics.resetForNewMonth = async function() {
@@ -432,6 +540,7 @@ studentSchema.statics.resetForNewMonth = async function() {
   return updatedCount;
 };
 
+
 // Update all students payment status (called daily)
 studentSchema.statics.updateAllPaymentStatuses = async function() {
   const students = await this.find({
@@ -450,6 +559,7 @@ studentSchema.statics.updateAllPaymentStatuses = async function() {
   console.log(`✅ Updated payment status for ${updatedCount} students`);
   return updatedCount;
 };
+
 
 const Student = mongoose.model('Student', studentSchema);
 

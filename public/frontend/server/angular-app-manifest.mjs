@@ -7,64 +7,64 @@ export default {
   routes: undefined,
   entryPointToBrowserMapping: {
   "src/app/pages/sidebar/add-news/add-news.ts": [
-    "chunk-NRTYI2VK.js",
-    "chunk-WQIBYQPC.js",
-    "chunk-IE5OCRMK.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-W3KQ3JBE.js",
+    "chunk-ZBB3GB6U.js",
+    "chunk-E7TDDVCV.js",
+    "chunk-2COAJKLJ.js"
   ],
   "src/app/pages/sidebar/schedule/schedule.ts": [
-    "chunk-63RAMA7H.js",
-    "chunk-7MYJHMX5.js",
-    "chunk-IE5OCRMK.js",
-    "chunk-MKLDNYIJ.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-TOPCPPLZ.js",
+    "chunk-OTNMM7R5.js",
+    "chunk-E7TDDVCV.js",
+    "chunk-ZQJPLYYF.js",
+    "chunk-2COAJKLJ.js"
   ],
   "src/app/pages/sidebar/reports/reports.ts": [
-    "chunk-DUAPMGEO.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-23STJGAI.js",
+    "chunk-2COAJKLJ.js"
   ],
   "src/app/pages/home/home.ts": [
-    "chunk-6FWM4RJM.js",
-    "chunk-WQIBYQPC.js",
-    "chunk-MKLDNYIJ.js"
+    "chunk-3MNMPJPG.js",
+    "chunk-ZBB3GB6U.js",
+    "chunk-ZQJPLYYF.js"
   ],
   "src/app/pages/login/login.ts": [
-    "chunk-VDSLELLR.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-XCGQTSCA.js",
+    "chunk-2COAJKLJ.js"
   ],
   "src/app/pages/registration/registration.ts": [
-    "chunk-ZWRKJZD3.js",
-    "chunk-7MYJHMX5.js",
-    "chunk-IE5OCRMK.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-3XYQHFTH.js",
+    "chunk-OTNMM7R5.js",
+    "chunk-E7TDDVCV.js",
+    "chunk-2COAJKLJ.js"
   ],
   "src/app/pages/dashboard/dashboard.ts": [
-    "chunk-MTLCGHU3.js",
-    "chunk-IE5OCRMK.js"
+    "chunk-KLJP4IVT.js",
+    "chunk-E7TDDVCV.js"
   ],
   "src/app/pages/sidebar/dashboard-home/dashboard-home.ts": [
-    "chunk-YSN7DRQO.js"
+    "chunk-MQ6ELV63.js"
   ],
   "src/app/pages/sidebar/user-configuration/user-configuration.ts": [
-    "chunk-MLUFOF6O.js",
-    "chunk-MKLDNYIJ.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-DIZ4DCH6.js",
+    "chunk-ZQJPLYYF.js",
+    "chunk-2COAJKLJ.js"
   ],
   "src/app/pages/sidebar/students/students.ts": [
-    "chunk-EML4J5AG.js",
-    "chunk-7MYJHMX5.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-QQOJUNJF.js",
+    "chunk-OTNMM7R5.js",
+    "chunk-2COAJKLJ.js"
   ],
   "src/app/pages/sidebar/coaches/coaches.ts": [
-    "chunk-LSEBTBWG.js",
-    "chunk-IE5OCRMK.js",
-    "chunk-MKLDNYIJ.js",
-    "chunk-X4FUVRDZ.js"
+    "chunk-KIQSYKWQ.js",
+    "chunk-E7TDDVCV.js",
+    "chunk-ZQJPLYYF.js",
+    "chunk-2COAJKLJ.js"
   ]
 },
   assets: {
-    'index.csr.html': {size: 4408, hash: '77838ce6562adadbff5f62546fa023e08a7ca0e10f7fad1f66a20a7bcc7f438e', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
-    'index.server.html': {size: 4071, hash: '24aa28449b1a92876db397377d0ecda332415159194c4472f7c4d630a5462e6d', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
+    'index.csr.html': {size: 4408, hash: 'fe936f1665cd1f32e7976c444d490bd87c4122090ba7066c6b24ebea36fa1a24', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
+    'index.server.html': {size: 4071, hash: '71a6d99e76c6b54c61205a628b0250ed720703a95d12d194cfcd9bd675465f4f', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
     'styles-Q63L6MFV.css': {size: 2052, hash: 'lKpZgfq6xJc', text: () => import('./assets-chunks/styles-Q63L6MFV_css.mjs').then(m => m.default)}
   },
 };
