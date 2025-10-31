@@ -13,13 +13,18 @@ export default `<!doctype html>
   <meta name="robots" content="index, follow">
   <meta name="geo.region" content="ID-JI">
   <meta name="geo.placename" content="Surabaya, Sidoarjo, Jawa Timur">
+  <meta name="language" content="Indonesian">
+  
+  <!-- Theme Color -->
+  <meta name="theme-color" content="#ffffff">
+  <meta name="msapplication-TileColor" content="#ffffff">
   
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://lafiswimmingacademy.com/">
   <meta property="og:title" content="Lafi Swimming Academy - Les Renang Surabaya, Sidoarjo &amp; Jatim">
   <meta property="og:description" content="Kursus les renang profesional di Surabaya, Sidoarjo, dan Jawa Timur. Instruktur bersertifikat untuk anak, dewasa, dan pemula.">
-  <meta property="og:image" content="https://lafiswimmingacademy.com/assets/icon/logo.png">
+  <meta property="og:image" content="https://lafiswimmingacademy.com/assets/favicon/android-icon-192x192.png">
   <meta property="og:site_name" content="Lafi Swimming Academy">
   <meta property="og:locale" content="id_ID">
   
@@ -28,41 +33,129 @@ export default `<!doctype html>
   <meta name="twitter:url" content="https://lafiswimmingacademy.com/">
   <meta name="twitter:title" content="Lafi Swimming Academy - Les Renang Surabaya, Sidoarjo &amp; Jatim">
   <meta name="twitter:description" content="Kursus les renang profesional di Surabaya, Sidoarjo, dan Jawa Timur. Instruktur bersertifikat.">
-  <meta name="twitter:image" content="https://lafiswimmingacademy.com/assets/icon/logo.png">
+  <meta name="twitter:image" content="https://lafiswimmingacademy.com/assets/favicon/android-icon-192x192.png">
   
-  <!-- Additional SEO Meta Tags -->
-  <meta name="theme-color" content="#1976d2">
+  <!-- Canonical URL -->
   <link rel="canonical" href="https://lafiswimmingacademy.com/">
   
-  <!-- Schema.org Structured Data -->
+  <!-- ==================== APPLE TOUCH ICONS ==================== -->
+  <link rel="apple-touch-icon" sizes="57x57" href="assets/favicon/apple-icon-57x57.png">
+  <link rel="apple-touch-icon" sizes="60x60" href="assets/favicon/apple-icon-60x60.png">
+  <link rel="apple-touch-icon" sizes="72x72" href="assets/favicon/apple-icon-72x72.png">
+  <link rel="apple-touch-icon" sizes="76x76" href="assets/favicon/apple-icon-76x76.png">
+  <link rel="apple-touch-icon" sizes="114x114" href="assets/favicon/apple-icon-114x114.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="assets/favicon/apple-icon-120x120.png">
+  <link rel="apple-touch-icon" sizes="144x144" href="assets/favicon/apple-icon-144x144.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="assets/favicon/apple-icon-152x152.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-icon-180x180.png">
+  
+  <!-- ==================== FAVICON ICONS ==================== -->
+  <!-- Android Chrome Icons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon/android-icon-192x192.png">
+  
+  <!-- Standard Favicon PNG -->
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="assets/favicon/favicon-96x96.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
+  
+  <!-- Web App Manifest (PWA) -->
+  <link rel="manifest" href="assets/favicon/manifest.json">
+  
+  <!-- Windows Tile Icon -->
+  <meta name="msapplication-TileImage" content="assets/favicon/ms-icon-144x144.png">
+  
+  <!-- ==================== PRECONNECT & DNS-PREFETCH ==================== -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link rel="dns-prefetch" href="https://www.google-analytics.com">
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  
+  <!-- ==================== SCHEMA.ORG STRUCTURED DATA ==================== -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SportsActivityLocation",
+    "@id": "https://lafiswimmingacademy.com/",
     "name": "Lafi Swimming Academy",
-    "image": "https://lafiswimmingacademy.com/assets/icon/logo.png",
-    "description": "Kursus les renang profesional di Surabaya, Sidoarjo, dan Jawa Timur",
+    "alternateName": ["Lafi Academy", "Akademi Renang Lafi"],
+    "description": "Kursus les renang profesional di Surabaya, Sidoarjo, dan Jawa Timur dengan instruktur bersertifikat untuk anak, remaja, dan dewasa",
+    "url": "https://lafiswimmingacademy.com",
+    "logo": "https://lafiswimmingacademy.com/assets/favicon/android-icon-192x192.png",
+    "image": "https://lafiswimmingacademy.com/assets/favicon/android-icon-192x192.png",
     "address": {
       "@type": "PostalAddress",
+      "streetAddress": "Jl. Raya Lidah Kulon No.309",
       "addressLocality": "Surabaya",
       "addressRegion": "Jawa Timur",
+      "postalCode": "60188",
       "addressCountry": "ID"
     },
     "telephone": "+62821-4004-4677",
-    "url": "https://lafiswimmingacademy.com",
+    "email": "info@lafiswimmingacademy.com",
     "priceRange": "\$\$",
+    "openingHoursSpecification": [
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+        "opens": "06:00",
+        "closes": "18:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": "Sunday",
+        "opens": "06:00",
+        "closes": "12:00"
+      }
+    ],
     "sameAs": [
       "https://www.instagram.com/lafiswimmingacademy",
-      "https://www.facebook.com/lafiswimmingacademy"
-    ]
+      "https://www.facebook.com/lafiswimmingacademy",
+      "https://www.tiktok.com/@lafiswimmingacademy",
+      "https://wa.me/6282140044677"
+    ],
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "4.8",
+      "reviewCount": "156"
+    }
   }
   </script>
   
-  <link rel="icon" type="image/png" href="assets/icon/logo.png">
+  <!-- ==================== ORGANIZATION SCHEMA ==================== -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Lafi Swimming Academy",
+    "url": "https://lafiswimmingacademy.com",
+    "logo": "https://lafiswimmingacademy.com/assets/favicon/android-icon-192x192.png",
+    "sameAs": [
+      "https://www.instagram.com/lafiswimmingacademy",
+      "https://www.facebook.com/lafiswimmingacademy"
+    ],
+    "contact": {
+      "@type": "ContactPoint",
+      "contactType": "Customer Service",
+      "telephone": "+62821-4004-4677",
+      "email": "info@lafiswimmingacademy.com"
+    },
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "Jl. Raya Lidah Kulon No.309",
+      "addressLocality": "Surabaya",
+      "addressRegion": "Jawa Timur",
+      "postalCode": "60188",
+      "addressCountry": "ID"
+    }
+  }
+  </script>
+  
+  <!-- ==================== EXTERNAL STYLESHEETS ==================== -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
 <style>:root{--primary-dark:#3b6fad;--primary-medium:#6199c4;--primary-light:#9dd8e5;--primary-lightest:#c8e8e0;--accent-blue:#2c5c8f;--accent-aqua:#7fd4e8;--white:#ffffff;--text-dark:#1a3a52;--text-gray:#5a6c7d;--bg-light:#f0f8fb;--gradient-ocean:linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-medium) 50%, var(--primary-light) 100%);--gradient-water:linear-gradient(180deg, var(--primary-medium) 0%, var(--primary-light) 100%);--gradient-overlay:linear-gradient(rgba(59, 111, 173, .9), rgba(157, 216, 229, .7))}*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;line-height:1.6;color:var(--text-dark);background:#fff;overflow-x:hidden}</style><link rel="stylesheet" href="styles-Q63L6MFV.css" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="styles-Q63L6MFV.css"></noscript></head>
 <body ngcm="">
   <app-root></app-root>
-<link rel="modulepreload" href="chunk-T53ZVLUQ.js"><link rel="modulepreload" href="chunk-A6SS7UDJ.js"><link rel="modulepreload" href="chunk-I6WMCBKH.js"><script src="main-IPC7BLKV.js" type="module"></script></body>
+<link rel="modulepreload" href="chunk-T53ZVLUQ.js"><link rel="modulepreload" href="chunk-A6SS7UDJ.js"><link rel="modulepreload" href="chunk-I6WMCBKH.js"><script src="main-HEADB4MR.js" type="module"></script></body>
 </html>
 `;
