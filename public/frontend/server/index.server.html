@@ -16,15 +16,19 @@
   <meta name="language" content="Indonesian">
   
   <!-- Theme Color -->
-  <meta name="theme-color" content="#ffffff">
-  <meta name="msapplication-TileColor" content="#ffffff">
+  <meta name="theme-color" content="#3b6fad">
+  <meta name="msapplication-TileColor" content="#3b6fad">
   
-  <!-- Open Graph / Facebook -->
+  <!-- ==================== OPEN GRAPH (PENTING UNTUK LOGO DI GOOGLE) ==================== -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://lafiswimmingacademy.com/">
   <meta property="og:title" content="Lafi Swimming Academy - Les Renang Surabaya, Sidoarjo &amp; Jatim">
   <meta property="og:description" content="Kursus les renang profesional di Surabaya, Sidoarjo, dan Jawa Timur. Instruktur bersertifikat untuk anak, dewasa, dan pemula.">
+  <!-- ✅ INI YANG MUNCUL DI GOOGLE - LOGO -->
   <meta property="og:image" content="https://lafiswimmingacademy.com/assets/favicon/android-icon-192x192.png">
+  <meta property="og:image:width" content="192">
+  <meta property="og:image:height" content="192">
+  <meta property="og:image:type" content="image/png">
   <meta property="og:site_name" content="Lafi Swimming Academy">
   <meta property="og:locale" content="id_ID">
   
@@ -38,7 +42,7 @@
   <!-- Canonical URL -->
   <link rel="canonical" href="https://lafiswimmingacademy.com/">
   
-  <!-- ==================== APPLE TOUCH ICONS ==================== -->
+  <!-- ==================== APPLE TOUCH ICONS (iOS) ==================== -->
   <link rel="apple-touch-icon" sizes="57x57" href="assets/favicon/apple-icon-57x57.png">
   <link rel="apple-touch-icon" sizes="60x60" href="assets/favicon/apple-icon-60x60.png">
   <link rel="apple-touch-icon" sizes="72x72" href="assets/favicon/apple-icon-72x72.png">
@@ -49,11 +53,8 @@
   <link rel="apple-touch-icon" sizes="152x152" href="assets/favicon/apple-icon-152x152.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-icon-180x180.png">
   
-  <!-- ==================== FAVICON ICONS ==================== -->
-  <!-- Android Chrome Icons -->
+  <!-- ==================== FAVICON ICONS (untuk browser tab) ==================== -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon/android-icon-192x192.png">
-  
-  <!-- Standard Favicon PNG -->
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="96x96" href="assets/favicon/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
@@ -64,7 +65,7 @@
   <!-- Windows Tile Icon -->
   <meta name="msapplication-TileImage" content="assets/favicon/ms-icon-144x144.png">
   
-  <!-- ==================== PRECONNECT & DNS-PREFETCH ==================== -->
+  <!-- ==================== PRECONNECT & PERFORMANCE ==================== -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
   <link rel="dns-prefetch" href="https://www.google-analytics.com">
@@ -150,8 +151,10 @@
   }
   </script>
   
-  <!-- ==================== EXTERNAL STYLESHEETS ==================== -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- ==================== FONT AWESOME CDN (BENAR - TANPA INTEGRITY ERROR) ==================== -->
+  <!-- ✅ Tanpa integrity attribute - tidak ada error -->
+  <!-- ✅ Crossorigin untuk CORS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   
 <link rel="stylesheet" href="styles-Q63L6MFV.css"></head>
 <body><script type="text/javascript" id="ng-event-dispatch-contract">(()=>{function p(t,n,r,o,e,i,f,m){return{eventType:t,event:n,targetElement:r,eic:o,timeStamp:e,eia:i,eirp:f,eiack:m}}function u(t){let n=[],r=e=>{n.push(e)};return{c:t,q:n,et:[],etc:[],d:r,h:e=>{r(p(e.type,e,e.target,t,Date.now()))}}}function s(t,n,r){for(let o=0;o<n.length;o++){let e=n[o];(r?t.etc:t.et).push(e),t.c.addEventListener(e,t.h,r)}}function c(t,n,r,o,e=window){let i=u(t);e._ejsas||(e._ejsas={}),e._ejsas[n]=i,s(i,r),s(i,o,!0)}window.__jsaction_bootstrap=c;})();

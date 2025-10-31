@@ -16,15 +16,19 @@ export default `<!doctype html>
   <meta name="language" content="Indonesian">
   
   <!-- Theme Color -->
-  <meta name="theme-color" content="#ffffff">
-  <meta name="msapplication-TileColor" content="#ffffff">
+  <meta name="theme-color" content="#3b6fad">
+  <meta name="msapplication-TileColor" content="#3b6fad">
   
-  <!-- Open Graph / Facebook -->
+  <!-- ==================== OPEN GRAPH (PENTING UNTUK LOGO DI GOOGLE) ==================== -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://lafiswimmingacademy.com/">
   <meta property="og:title" content="Lafi Swimming Academy - Les Renang Surabaya, Sidoarjo &amp; Jatim">
   <meta property="og:description" content="Kursus les renang profesional di Surabaya, Sidoarjo, dan Jawa Timur. Instruktur bersertifikat untuk anak, dewasa, dan pemula.">
+  <!-- ✅ INI YANG MUNCUL DI GOOGLE - LOGO -->
   <meta property="og:image" content="https://lafiswimmingacademy.com/assets/favicon/android-icon-192x192.png">
+  <meta property="og:image:width" content="192">
+  <meta property="og:image:height" content="192">
+  <meta property="og:image:type" content="image/png">
   <meta property="og:site_name" content="Lafi Swimming Academy">
   <meta property="og:locale" content="id_ID">
   
@@ -38,7 +42,7 @@ export default `<!doctype html>
   <!-- Canonical URL -->
   <link rel="canonical" href="https://lafiswimmingacademy.com/">
   
-  <!-- ==================== APPLE TOUCH ICONS ==================== -->
+  <!-- ==================== APPLE TOUCH ICONS (iOS) ==================== -->
   <link rel="apple-touch-icon" sizes="57x57" href="assets/favicon/apple-icon-57x57.png">
   <link rel="apple-touch-icon" sizes="60x60" href="assets/favicon/apple-icon-60x60.png">
   <link rel="apple-touch-icon" sizes="72x72" href="assets/favicon/apple-icon-72x72.png">
@@ -49,11 +53,8 @@ export default `<!doctype html>
   <link rel="apple-touch-icon" sizes="152x152" href="assets/favicon/apple-icon-152x152.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon/apple-icon-180x180.png">
   
-  <!-- ==================== FAVICON ICONS ==================== -->
-  <!-- Android Chrome Icons -->
+  <!-- ==================== FAVICON ICONS (untuk browser tab) ==================== -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon/android-icon-192x192.png">
-  
-  <!-- Standard Favicon PNG -->
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="96x96" href="assets/favicon/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
@@ -64,7 +65,7 @@ export default `<!doctype html>
   <!-- Windows Tile Icon -->
   <meta name="msapplication-TileImage" content="assets/favicon/ms-icon-144x144.png">
   
-  <!-- ==================== PRECONNECT & DNS-PREFETCH ==================== -->
+  <!-- ==================== PRECONNECT & PERFORMANCE ==================== -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
   <link rel="dns-prefetch" href="https://www.google-analytics.com">
@@ -150,8 +151,10 @@ export default `<!doctype html>
   }
   </script>
   
-  <!-- ==================== EXTERNAL STYLESHEETS ==================== -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- ==================== FONT AWESOME CDN (BENAR - TANPA INTEGRITY ERROR) ==================== -->
+  <!-- ✅ Tanpa integrity attribute - tidak ada error -->
+  <!-- ✅ Crossorigin untuk CORS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   
 <style>:root{--primary-dark:#3b6fad;--primary-medium:#6199c4;--primary-light:#9dd8e5;--primary-lightest:#c8e8e0;--accent-blue:#2c5c8f;--accent-aqua:#7fd4e8;--white:#ffffff;--text-dark:#1a3a52;--text-gray:#5a6c7d;--bg-light:#f0f8fb;--gradient-ocean:linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-medium) 50%, var(--primary-light) 100%);--gradient-water:linear-gradient(180deg, var(--primary-medium) 0%, var(--primary-light) 100%);--gradient-overlay:linear-gradient(rgba(59, 111, 173, .9), rgba(157, 216, 229, .7))}*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;line-height:1.6;color:var(--text-dark);background:#fff;overflow-x:hidden}</style><link rel="stylesheet" href="styles-Q63L6MFV.css" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="styles-Q63L6MFV.css"></noscript></head>
 <body ngcm="">
