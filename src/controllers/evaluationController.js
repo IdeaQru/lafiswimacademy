@@ -342,9 +342,10 @@ exports.deleteEvaluation = async (req, res) => {
 
 // ==================== RESET CURRENT MONTH ONLY ====================
 
+// backend/src/controllers/evaluationController.js
+
 /**
- * ✅ Reset HANYA bulan ini
- * @route   POST /api/evaluations/reset/:studentId
+ * ✅ Reset CURRENT MONTH ONLY - Delete evaluations & mark schedules
  */
 exports.resetTrainingCount = async (req, res) => {
   try {
@@ -368,27 +369,35 @@ exports.resetTrainingCount = async (req, res) => {
 
     console.log(`📅 Reset for: ${currentYear}-${currentMonth}`);
 
-    // Get SessionCounter
-    const counter = await SessionCounter.getOrCreateCounter(studentObjectId);
-
-    // Get evaluations bulan ini
+    // ==================== STEP 1: Get evaluations bulan ini ====================
+    console.log('\n📋 STEP 1: Getting evaluations...');
     const evaluationsToDelete = await TrainingEvaluation.find({
       studentId: studentObjectId,
       trainingDate: {
         $gte: new Date(currentYear, currentMonth - 1, 1),
         $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59)
       }
-    });
+    }).populate('scheduleId');
 
     console.log(`✅ Found ${evaluationsToDelete.length} evaluations`);
 
-    // Archive
+    // ==================== STEP 2: Get related schedules ====================
+    console.log('\n🔗 STEP 2: Getting related schedules...');
+    const scheduleIds = evaluationsToDelete
+      .map(e => e.scheduleId?._id)
+      .filter(id => id !== null && id !== undefined);
+
+    console.log(`✅ Found ${scheduleIds.length} schedule(s) to mark`);
+
+    // ==================== STEP 3: Archive evaluations ====================
+    console.log('\n💾 STEP 3: Archiving evaluations...');
     if (evaluationsToDelete.length > 0) {
       await TrainingLogger.logReset(studentObjectId, currentYear, currentMonth, evaluationsToDelete);
-      console.log(`✅ Archived`);
+      console.log(`✅ Archived ${evaluationsToDelete.length} evaluations`);
     }
 
-    // Delete
+    // ==================== STEP 4: Delete evaluations ====================
+    console.log('\n🗑️ STEP 4: Deleting evaluations from TrainingEvaluation...');
     await TrainingEvaluation.deleteMany({
       studentId: studentObjectId,
       trainingDate: {
@@ -396,10 +405,30 @@ exports.resetTrainingCount = async (req, res) => {
         $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59)
       }
     });
+    console.log(`✅ Deleted`);
 
-    // Update counter
+    // ==================== STEP 5: Mark schedules as archived ====================
+    console.log('\n📊 STEP 5: Marking schedules as archived...');
+    let scheduleUpdateResult = { modifiedCount: 0 };
+    
+    if (scheduleIds.length > 0) {
+      scheduleUpdateResult = await Schedule.updateMany(
+        { _id: { $in: scheduleIds } },
+        {
+          status: 'archived',
+          archivedAt: new Date(),
+          archivedReason: 'Evaluation reset - data moved to TrainingLogger'
+        }
+      );
+      console.log(`✅ Marked ${scheduleUpdateResult.modifiedCount} schedule(s) as archived`);
+    }
+
+    // ==================== STEP 6: Update counter ====================
+    console.log('\n📊 STEP 6: Updating SessionCounter...');
+    const counter = await SessionCounter.getOrCreateCounter(studentObjectId);
     const resetResult = counter.recordReset();
     await counter.save();
+    console.log(`✅ Counter updated`);
 
     console.log('═══════════════════════════════════════════');
     console.log('✅ RESET COMPLETE');
@@ -410,7 +439,8 @@ exports.resetTrainingCount = async (req, res) => {
       message: resetResult.message,
       data: {
         studentId: studentObjectId.toString(),
-        deletedCount: evaluationsToDelete.length,
+        deletedEvaluations: evaluationsToDelete.length,
+        archivedSchedules: scheduleUpdateResult.modifiedCount,
         resetDate: resetResult.resetDate,
         resetCount: counter.resetCount
       }
@@ -424,17 +454,8 @@ exports.resetTrainingCount = async (req, res) => {
   }
 };
 
-// ==================== RESET ALL (DELETE EVERYTHING) ====================
-
 /**
- * ✅ Reset SEMUA - Delete everything dan move ke archive
- * @route   POST /api/evaluations/reset-all/:studentId
- */
-// backend/src/controllers/evaluationController.js
-
-/**
- * ✅ Reset ALL training count - Delete everything
- * @route   POST /api/evaluations/reset-all/:studentId
+ * ✅ Reset ALL - Delete everything & mark all schedules
  */
 exports.resetAllTrainingCount = async (req, res) => {
   try {
@@ -444,7 +465,6 @@ exports.resetAllTrainingCount = async (req, res) => {
     console.log('🔄 RESET ALL TRAINING COUNT');
     console.log('═══════════════════════════════════════════');
 
-    // Validate
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({
         success: false,
@@ -461,7 +481,8 @@ exports.resetAllTrainingCount = async (req, res) => {
     try {
       allEvaluations = await TrainingEvaluation.find({
         studentId: studentObjectId
-      });
+      }).populate('scheduleId');
+      
       console.log(`✅ Found ${allEvaluations.length} total`);
     } catch (error) {
       console.error('❌ STEP 1 FAILED:', error.message);
@@ -471,11 +492,18 @@ exports.resetAllTrainingCount = async (req, res) => {
       });
     }
 
-    // ==================== STEP 2: Group by year-month ====================
-    console.log('\n💾 STEP 2: Grouping by month...');
+    // ==================== STEP 2: Get all related schedules ====================
+    console.log('\n🔗 STEP 2: Getting all related schedules...');
+    const allScheduleIds = allEvaluations
+      .map(evaluation => evaluation.scheduleId?._id)
+      .filter(id => id !== null && id !== undefined);
+
+    console.log(`✅ Found ${allScheduleIds.length} schedule(s) to mark`);
+
+    // ==================== STEP 3: Group evaluations by year-month ====================
+    console.log('\n💾 STEP 3: Grouping by month...');
     const grouped = {};
     
-    // ✅ RENAMED: eval → evaluation (eval is reserved word)
     allEvaluations.forEach(evaluation => {
       try {
         const date = new Date(evaluation.trainingDate);
@@ -497,8 +525,8 @@ exports.resetAllTrainingCount = async (req, res) => {
       console.log(`   - ${key}: ${evals.length} evaluations`);
     });
 
-    // ==================== STEP 3: Archive each month ====================
-    console.log('\n💾 STEP 3: Archiving to TrainingLogger...');
+    // ==================== STEP 4: Archive each month ====================
+    console.log('\n💾 STEP 4: Archiving to TrainingLogger...');
     try {
       for (const [monthKey, evaluations] of Object.entries(grouped)) {
         const [year, month] = monthKey.split('-');
@@ -513,15 +541,15 @@ exports.resetAllTrainingCount = async (req, res) => {
         console.log(`      ✅ Archived`);
       }
     } catch (error) {
-      console.error('❌ STEP 3 FAILED:', error.message);
+      console.error('❌ STEP 4 FAILED:', error.message);
       return res.status(400).json({
         success: false,
         message: 'Error archiving: ' + error.message
       });
     }
 
-    // ==================== STEP 4: Delete ALL from TrainingEvaluation ====================
-    console.log('\n🗑️ STEP 4: Deleting ALL from TrainingEvaluation...');
+    // ==================== STEP 5: Delete ALL from TrainingEvaluation ====================
+    console.log('\n🗑️ STEP 5: Deleting ALL from TrainingEvaluation...');
     let deleteResult;
     try {
       deleteResult = await TrainingEvaluation.deleteMany({
@@ -529,15 +557,39 @@ exports.resetAllTrainingCount = async (req, res) => {
       });
       console.log(`✅ Deleted ${deleteResult.deletedCount}`);
     } catch (error) {
-      console.error('❌ STEP 4 FAILED:', error.message);
+      console.error('❌ STEP 5 FAILED:', error.message);
       return res.status(400).json({
         success: false,
         message: 'Error deleting evaluations: ' + error.message
       });
     }
 
-    // ==================== STEP 5: Update SessionCounter ====================
-    console.log('\n📊 STEP 5: Updating SessionCounter...');
+    // ==================== STEP 6: Mark ALL schedules as archived ====================
+    console.log('\n📊 STEP 6: Marking ALL schedules as archived...');
+    let scheduleUpdateResult = { modifiedCount: 0 };
+    
+    if (allScheduleIds.length > 0) {
+      try {
+        scheduleUpdateResult = await Schedule.updateMany(
+          { _id: { $in: allScheduleIds } },
+          {
+            status: 'archived',
+            archivedAt: new Date(),
+            archivedReason: 'Complete evaluation reset - all data moved to TrainingLogger'
+          }
+        );
+        console.log(`✅ Marked ${scheduleUpdateResult.modifiedCount} schedule(s) as archived`);
+      } catch (error) {
+        console.error('❌ STEP 6 FAILED:', error.message);
+        return res.status(400).json({
+          success: false,
+          message: 'Error updating schedules: ' + error.message
+        });
+      }
+    }
+
+    // ==================== STEP 7: Update SessionCounter ====================
+    console.log('\n📊 STEP 7: Updating SessionCounter...');
     let counter, resetResult;
     try {
       counter = await SessionCounter.getOrCreateCounter(studentObjectId);
@@ -548,7 +600,7 @@ exports.resetAllTrainingCount = async (req, res) => {
       console.log(`   - Total resets: ${counter.resetCount}`);
       console.log(`   - Last reset: ${counter.lastResetDate}`);
     } catch (error) {
-      console.error('❌ STEP 5 FAILED:', error.message);
+      console.error('❌ STEP 7 FAILED:', error.message);
       return res.status(400).json({
         success: false,
         message: 'Error updating counter: ' + error.message
@@ -561,10 +613,11 @@ exports.resetAllTrainingCount = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Semua ${allEvaluations.length} training records telah di-archive dan dihapus`,
+      message: `Semua ${allEvaluations.length} training records telah di-archive, dihapus, dan ${scheduleUpdateResult.modifiedCount} schedule(s) di-mark archived`,
       data: {
         studentId: studentObjectId.toString(),
         totalDeleted: allEvaluations.length,
+        schedulesArchived: scheduleUpdateResult.modifiedCount,
         monthsArchived: Object.keys(grouped).length,
         resetDate: resetResult.resetDate,
         totalResets: counter.resetCount
@@ -581,6 +634,7 @@ exports.resetAllTrainingCount = async (req, res) => {
     });
   }
 };
+
 
 
 // ==================== GET TRAINING PROGRESS ====================

@@ -90,7 +90,7 @@ const scheduleSchema = new mongoose.Schema({
   // ==================== STATUS ====================
   status: {
     type: String,
-    enum: ['scheduled', 'completed', 'cancelled', 'rescheduled'],
+    enum: ['scheduled', 'completed', 'cancelled', 'rescheduled', 'archived'],
     default: 'scheduled',
     index: true
   },
@@ -119,6 +119,23 @@ const scheduleSchema = new mongoose.Schema({
   reminderBeforeHours: {
     type: Number,
     default: 24
+  },
+
+  // ==================== ARCHIVE TRACKING ====================
+  archivedAt: {
+    type: Date,
+    default: null,
+    // ✅ TTL Index: Auto-delete 3 days (259200 seconds) after archived
+    index: {
+      expireAfterSeconds: 259200,
+      sparse: true,  // Hanya berlaku untuk documents yang punya archivedAt
+      name: 'archivedAt_ttl'
+    }
+  },
+
+  archivedReason: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true
@@ -129,5 +146,62 @@ scheduleSchema.index({ studentId: 1, date: -1 });
 scheduleSchema.index({ coachId: 1, date: -1 });
 scheduleSchema.index({ date: 1 });
 scheduleSchema.index({ status: 1 });
+
+// ✅ Compound index untuk query archived
+scheduleSchema.index({ status: 1, archivedAt: 1 }, { name: 'status_archived_index' });
+
+// ==================== STATICS ====================
+
+/**
+ * ✅ Get archived schedules older than specified days
+ */
+scheduleSchema.statics.getOldArchivedSchedules = async function(days = 3) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  return await this.find({
+    status: 'archived',
+    archivedAt: { $exists: true, $lt: cutoffDate }
+  }).lean();
+};
+
+/**
+ * ✅ Manually delete old archived schedules
+ */
+scheduleSchema.statics.deleteOldArchivedSchedules = async function(days = 3) {
+  console.log(`🗑️ Deleting archived schedules older than ${days} days...`);
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  const result = await this.deleteMany({
+    status: 'archived',
+    archivedAt: { $exists: true, $lt: cutoffDate }
+  });
+
+  console.log(`✅ Deleted ${result.deletedCount} old archived schedules`);
+  return result;
+};
+
+/**
+ * ✅ Get archive statistics
+ */
+scheduleSchema.statics.getArchiveStats = async function() {
+  const total = await this.countDocuments({ status: 'archived' });
+  
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 3);
+  
+  const willDelete = await this.countDocuments({
+    status: 'archived',
+    archivedAt: { $exists: true, $lt: cutoffDate }
+  });
+
+  return {
+    totalArchived: total,
+    willDeleteIn3Days: willDelete,
+    percentage: total > 0 ? Math.round((willDelete / total) * 100) : 0
+  };
+};
 
 module.exports = mongoose.model('Schedule', scheduleSchema);
