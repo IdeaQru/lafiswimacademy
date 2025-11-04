@@ -24,7 +24,7 @@ export default {
     "chunk-RKCD26AO.js"
   ],
   "src/app/pages/home/home.ts": [
-    "chunk-KNTQ437I.js",
+    "chunk-HED5W3SC.js",
     "chunk-2PDFHF7X.js",
     "chunk-TFJFIFAX.js",
     "chunk-RKCD26AO.js"
@@ -64,8 +64,8 @@ export default {
   ]
 },
   assets: {
-    'index.csr.html': {size: 8921, hash: '8f8dd87c8c319d53c699df62339a48aca58dba6417ac94dca83f5ecffe455b57', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
-    'index.server.html': {size: 8584, hash: '7785df48aa7c2685ad5e16aaafa1bf2c263e7990c7f0544420f42a0800070f7a', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
+    'index.csr.html': {size: 8921, hash: '06a4a0c16d211658514778c81e7b620b378d15597a2ca3c0b7ef2c00945676fe', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
+    'index.server.html': {size: 8584, hash: '39008971066170dc9871e980439d6e1f3f74f1bbb540fbe1e491e502e74d7407', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
     'styles-Q63L6MFV.css': {size: 2052, hash: 'lKpZgfq6xJc', text: () => import('./assets-chunks/styles-Q63L6MFV_css.mjs').then(m => m.default)}
   },
 };
