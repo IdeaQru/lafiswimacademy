@@ -269,7 +269,7 @@ setTimeout(() => {
     reminder1Hour.start();
     console.log('⏰ Schedule reminder jobs started');
     
-    paymentReminderJob.start();
+    // paymentReminderJob.start();
     monthlyResetJob.start();
     console.log('💰 Payment reminder jobs started');
   } catch (error) {

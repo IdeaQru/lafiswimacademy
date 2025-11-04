@@ -1,15 +1,22 @@
+// backend/src/models/Student.js
+
 const mongoose = require('mongoose');
 
+// ==================== MAIN STUDENT SCHEMA ====================
 const studentSchema = new mongoose.Schema({
+  // ==================== BASIC INFO ====================
   studentId: {
     type: String,
     required: [true, 'Student ID is required'],
     unique: true,
+    trim: true,
+    index: true
   },
   fullName: {
     type: String,
     required: [true, 'Full name is required'],
-    trim: true
+    trim: true,
+    index: true
   },
   dateOfBirth: {
     type: Date,
@@ -31,28 +38,33 @@ const studentSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: [true, 'Phone number is required'],
-    match: [/^[0-9]{10,15}$/, 'Phone number must be 10-15 digits']
+    match: [/^[0-9]{10,15}$/, 'Phone number must be 10-15 digits'],
+    index: true
   },
   email: {
     type: String,
     trim: true,
     lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Invalid email format'],
+    match: [/^\S+@\S+\.\S+$|^$/, 'Invalid email format'],
     default: null
   },
   address: {
     type: String,
     required: [true, 'Address is required']
   },
+
+  // ==================== PROGRAM INFO ====================
   programType: {
     type: String,
     enum: ['private', 'semiPrivate', 'group'],
-    required: [true, 'Program type is required']
+    required: [true, 'Program type is required'],
+    index: true
   },
   programCategory: {
     type: String,
     enum: ['Aquatike', 'Beginner', 'Teen & Adult', 'Therapy', 'Preschool'],
-    required: [true, 'Program category is required']
+    required: [true, 'Program category is required'],
+    index: true
   },
   poolLocation: {
     type: String,
@@ -61,15 +73,18 @@ const studentSchema = new mongoose.Schema({
   trainingDay: {
     type: String,
     enum: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Fleksibel'],
-    required: [true, 'Training day is required']
+    required: [true, 'Training day is required'],
+    index: true
   },
+
+  // ==================== HEALTH & ADDITIONAL INFO ====================
   healthCondition: {
     type: String,
-    default: null
+    default: ''
   },
   allergies: {
     type: String,
-    default: null
+    default: ''
   },
   knownFrom: {
     type: String,
@@ -80,349 +95,284 @@ const studentSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+
+  // ==================== STATUS & REGISTRATION ====================
   registrationDate: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   status: {
     type: String,
     enum: ['Aktif', 'Non-Aktif', 'Cuti'],
-    default: 'Aktif'
+    default: 'Aktif',
+    index: true
   },
 
-  // ==================== PAYMENT TRACKING ====================
-  monthlyFee: {
-    type: Number,
-    default: 0
-  },
-  paymentDueDate: {
-    type: Number,
-    default: 1
-  },
-  lastPaymentDate: {
-    type: Date
-  },
-  nextPaymentDue: {
-    type: Date
-  },
+  // ==================== PAYMENT STATUS ====================
   paymentStatus: {
     type: String,
-    enum: ['Paid', 'Pending', 'Overdue'],
-    default: 'Pending'
+    enum: ['Lunas', 'Belum Bayar', 'Cicilan'],
+    default: 'Belum Bayar',
+    index: true
   },
-  monthsUnpaid: {
+  // ✅ HAPUS: paymentHistory array
+  // ✅ USE: Payment collection instead
+
+
+  // ==================== TRAINING EVALUATION REFERENCE ====================
+  // ✅ HAPUS: trainingHistory array
+  // ✅ USE: TrainingEvaluation collection instead
+  
+
+  // ✅ CUMULATIVE TRACKING (tidak pernah reset)
+  totalTrainingSessions: {
     type: Number,
-    default: 0
-  },
-  totalUnpaid: {
-    type: Number,
-    default: 0
-  },
-  enableReminder: {
-    type: Boolean,
-    default: true
+    default: 0,
+    index: true
   },
 
-  // ==================== CURRENT MONTH PAYMENT ====================
-  currentMonthPayment: {
-    month: String,
-    status: {
-      type: String,
-      enum: ['Paid', 'Pending', 'Overdue'],
-      default: 'Pending'
-    },
-    paidDate: Date,
-    amount: Number
+  // ✅ LAST PAYMENT REMINDER DATE
+  lastPaymentReminderDate: {
+    type: Date,
+    default: null
   }
+
 }, {
   timestamps: true
 });
 
+// ==================== INDEXES ====================
+studentSchema.index({ studentId: 1 });
+studentSchema.index({ fullName: 1 });
+studentSchema.index({ phone: 1 });
+studentSchema.index({ registrationDate: 1 });
+studentSchema.index({ status: 1 });
+studentSchema.index({ paymentStatus: 1 });
+studentSchema.index({ programType: 1 });
+studentSchema.index({ programCategory: 1 });
+studentSchema.index({ trainingDay: 1 });
+studentSchema.index({ gender: 1 });
+studentSchema.index({ age: 1 });
+studentSchema.index({ totalTrainingSessions: 1 });
+
+// Compound indexes
+studentSchema.index({ status: 1, paymentStatus: 1 });
+studentSchema.index({ status: 1, programType: 1 });
+studentSchema.index({ status: 1, trainingDay: 1 });
+studentSchema.index({ status: 1, totalTrainingSessions: 1 });
 
 // ==================== PRE-SAVE HOOKS ====================
 
-// Calculate age before saving
+/**
+ * ✅ Calculate age before saving
+ */
 studentSchema.pre('save', function(next) {
   if (this.dateOfBirth) {
     const today = new Date();
     const birthDate = new Date(this.dateOfBirth);
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
-    
+
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       age--;
     }
-    
-    this.age = age;
+
+    this.age = Math.max(0, age);
   }
   next();
 });
-
-
-// Auto-update payment status and handle month changes
-studentSchema.pre('save', function(next) {
-  if (this.status === 'Aktif' && this.monthlyFee > 0) {
-    const today = new Date();
-    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-    
-    // Initialize currentMonthPayment if not exists
-    if (!this.currentMonthPayment || !this.currentMonthPayment.month) {
-      this.currentMonthPayment = {
-        month: currentMonth,
-        status: 'Pending',
-        paidDate: null,
-        amount: 0
-      };
-    }
-    
-    // Check if month has changed
-    if (this.currentMonthPayment.month !== currentMonth) {
-      console.log(`📅 Month changed for ${this.fullName}: ${this.currentMonthPayment.month} → ${currentMonth}`);
-      
-      // Check if last month was paid
-      if (this.currentMonthPayment.status !== 'Paid') {
-        // Last month was not paid - add to unpaid count
-        this.monthsUnpaid = (this.monthsUnpaid || 0) + 1;
-        this.totalUnpaid = this.monthlyFee * this.monthsUnpaid;
-        console.log(`⚠️ ${this.fullName} - Added unpaid month. Total: ${this.monthsUnpaid} months`);
-      }
-      
-      // Reset for new month
-      this.currentMonthPayment = {
-        month: currentMonth,
-        status: 'Pending',
-        paidDate: null,
-        amount: 0
-      };
-    }
-    
-    // Update status based on due date (only if not paid)
-    if (this.paymentDueDate && this.currentMonthPayment.status !== 'Paid') {
-      const dueDate = new Date(today.getFullYear(), today.getMonth(), this.paymentDueDate);
-      dueDate.setHours(23, 59, 59, 999);
-      
-      if (today > dueDate) {
-        this.currentMonthPayment.status = 'Overdue';
-        this.paymentStatus = 'Overdue';
-        
-        // Ensure at least 1 month unpaid if overdue
-        if (this.monthsUnpaid === 0) {
-          this.monthsUnpaid = 1;
-          this.totalUnpaid = this.monthlyFee;
-        }
-      } else {
-        this.currentMonthPayment.status = 'Pending';
-        this.paymentStatus = 'Pending';
-      }
-    }
-    
-    // Calculate next payment due if not set
-    if (!this.nextPaymentDue && this.paymentDueDate) {
-      const nextDue = new Date(today.getFullYear(), today.getMonth(), this.paymentDueDate);
-      if (nextDue < today) {
-        nextDue.setMonth(nextDue.getMonth() + 1);
-      }
-      this.nextPaymentDue = nextDue;
-    }
-  }
-  
-  next();
-});
-
-
-// ==================== INDEXES ====================
-studentSchema.index({ studentId: 1 });
-studentSchema.index({ fullName: 1 });
-studentSchema.index({ registrationDate: 1 });
-studentSchema.index({ status: 1 });
-studentSchema.index({ programType: 1 });
-studentSchema.index({ programCategory: 1 });
-studentSchema.index({ poolLocation: 1 });
-studentSchema.index({ trainingDay: 1 });
-studentSchema.index({ gender: 1 });
-studentSchema.index({ paymentStatus: 1 });
-studentSchema.index({ age: 1 });
-studentSchema.index({ knownFrom: 1 });
-
-// Compound indexes for reports
-studentSchema.index({ registrationDate: 1, status: 1 });
-studentSchema.index({ status: 1, paymentStatus: 1 });
-studentSchema.index({ status: 1, programType: 1 });
-studentSchema.index({ status: 1, programCategory: 1 });
-
-// Payment-related indexes
-studentSchema.index({ paymentStatus: 1 });
-studentSchema.index({ nextPaymentDue: 1 });
-studentSchema.index({ 
-  status: 1, 
-  paymentStatus: 1, 
-  nextPaymentDue: 1 
-});
-
-// Current month payment indexes
-studentSchema.index({ 'currentMonthPayment.month': 1 });
-studentSchema.index({ 'currentMonthPayment.status': 1 });
-studentSchema.index({ 
-  status: 1, 
-  'currentMonthPayment.month': 1, 
-  'currentMonthPayment.status': 1 
-});
-
 
 // ==================== INSTANCE METHODS ====================
 
-// Mark current month as paid
-studentSchema.methods.markCurrentMonthPaid = function(amount, paymentDate = new Date()) {
-  const today = paymentDate;
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+/**
+ * ✅ Get total training count dari TrainingEvaluation collection
+ */
+studentSchema.methods.getTotalTrainingCount = async function() {
+  const TrainingEvaluation = require('./TrainingEvaluation');
   
-  this.currentMonthPayment = {
-    month: currentMonth,
-    status: 'Paid',
-    paidDate: paymentDate,
-    amount: amount
+  const count = await TrainingEvaluation.countDocuments({
+    studentId: this._id,
+    attendance: 'Hadir'
+  });
+  
+  console.log(`✅ Total training count for ${this.fullName}: ${count}`);
+  return count;
+};
+
+/**
+ * ✅ Get training count untuk specific month dari TrainingEvaluation
+ */
+studentSchema.methods.getMonthTrainingCount = async function(year, month) {
+  const TrainingEvaluation = require('./TrainingEvaluation');
+  
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59);
+  
+  const count = await TrainingEvaluation.countDocuments({
+    studentId: this._id,
+    attendance: 'Hadir',
+    trainingDate: {
+      $gte: startDate,
+      $lte: endDate
+    }
+  });
+  
+  console.log(`✅ Training count for ${this.fullName} ${year}-${month}: ${count}`);
+  return count;
+};
+
+/**
+ * ✅ Get training progress (bulan ini vs total vs carryover)
+ */
+studentSchema.methods.getTrainingProgress = async function() {
+  const TrainingEvaluation = require('./TrainingEvaluation');
+  
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  
+  // Count bulan ini
+  const startDate = new Date(currentYear, currentMonth, 1);
+  const endDate = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
+  
+  const monthCount = await TrainingEvaluation.countDocuments({
+    studentId: this._id,
+    attendance: 'Hadir',
+    trainingDate: {
+      $gte: startDate,
+      $lte: endDate
+    }
+  });
+  
+  // Total semua
+  const totalCount = await TrainingEvaluation.countDocuments({
+    studentId: this._id,
+    attendance: 'Hadir'
+  });
+  
+  // Carry over
+  const carryOver = totalCount - monthCount;
+  
+  const progress = {
+    monthCount,
+    totalCount,
+    carryOver,
+    message: `${monthCount} bulan ini, ${carryOver} dari bulan lalu = ${totalCount} total`
   };
   
-  this.lastPaymentDate = paymentDate;
-  this.paymentStatus = 'Paid';
-  
-  // Calculate next payment due
-  const nextDue = new Date(paymentDate);
-  nextDue.setMonth(nextDue.getMonth() + 1);
-  nextDue.setDate(this.paymentDueDate || 10);
-  this.nextPaymentDue = nextDue;
-  
-  // Reduce unpaid count if paying current month
-  if (this.monthsUnpaid > 0) {
-    this.monthsUnpaid--;
-    this.totalUnpaid = this.monthlyFee * this.monthsUnpaid;
-  }
-  
-  console.log(`✅ ${this.fullName} - Payment marked for ${currentMonth}`);
+  console.log(`✅ Progress for ${this.fullName}:`, progress);
+  return progress;
 };
 
-
-// Update payment status (called by cron or manually)
-studentSchema.methods.updatePaymentStatus = function() {
-  const today = new Date();
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+/**
+ * ✅ Get total payment dari Payment collection
+ */
+studentSchema.methods.getTotalPayment = async function() {
+  const Payment = require('./Payment');
   
-  // Check if month changed
-  if (!this.currentMonthPayment || this.currentMonthPayment.month !== currentMonth) {
-    // Month changed - check last month status
-    if (this.currentMonthPayment && this.currentMonthPayment.status !== 'Paid') {
-      this.monthsUnpaid = (this.monthsUnpaid || 0) + 1;
-      this.totalUnpaid = this.monthlyFee * this.monthsUnpaid;
-    }
-    
-    // Reset for new month
-    this.currentMonthPayment = {
-      month: currentMonth,
-      status: 'Pending',
-      paidDate: null,
-      amount: 0
-    };
-  }
-  
-  // Check if overdue this month
-  if (this.currentMonthPayment.status !== 'Paid' && this.paymentDueDate) {
-    const dueDate = new Date(today.getFullYear(), today.getMonth(), this.paymentDueDate);
-    dueDate.setHours(23, 59, 59, 999);
-    
-    if (today > dueDate) {
-      this.currentMonthPayment.status = 'Overdue';
-      this.paymentStatus = 'Overdue';
-      
-      if (this.monthsUnpaid === 0) {
-        this.monthsUnpaid = 1;
-        this.totalUnpaid = this.monthlyFee;
+  const result = await Payment.aggregate([
+    {
+      $match: { studentId: this._id }
+    },
+    {
+      $group: {
+        _id: null,
+        totalAmount: { $sum: '$amount' }
       }
     }
-  }
+  ]);
+  
+  const total = result.length > 0 ? result[0].totalAmount : 0;
+  console.log(`✅ Total payment for ${this.fullName}: Rp ${total}`);
+  return total;
 };
 
-
-// Legacy method - kept for backward compatibility
-studentSchema.methods.markAsPaid = function(paymentDate = new Date()) {
-  this.markCurrentMonthPaid(this.monthlyFee, paymentDate);
+/**
+ * ✅ Get payment count dari Payment collection
+ */
+studentSchema.methods.getPaymentCount = async function() {
+  const Payment = require('./Payment');
+  
+  const count = await Payment.countDocuments({
+    studentId: this._id
+  });
+  
+  console.log(`✅ Payment count for ${this.fullName}: ${count}`);
+  return count;
 };
 
-
-// Get program info
+/**
+ * ✅ Get program info
+ */
 studentSchema.methods.getProgramInfo = function() {
   const programs = {
     private: {
-      type: 'Private Training',
-      participants: '1 Siswa (1-on-1)',
-      price: 'Mulai 750 ribu'
+      type: 'Private Training - 1 Siswa (1-on-1)',
+      label: '🧑 Private',
+      participants: '1 Siswa',
+      priceRange: 'Mulai dari 500 ribu'
     },
     semiPrivate: {
-      type: 'Semi Private',
+      type: 'Semi Private Training - 2-3 Siswa',
+      label: '👥 Semi Private',
       participants: '2-3 Siswa',
-      price: 'Mulai 500 ribu'
+      priceRange: 'Mulai dari 750 ribu'
     },
     group: {
-      type: 'Group Class',
+      type: 'Group Class - 4-5 Siswa',
+      label: '👨‍👩‍👧‍👦 Group',
       participants: '4-5 Siswa',
-      price: 'Mulai 400 ribu'
+      priceRange: 'Mulai dari 1.2 juta'
     }
   };
-  
+
   return programs[this.programType] || {};
 };
 
+/**
+ * ✅ Get program category label
+ */
+studentSchema.methods.getCategoryLabel = function() {
+  const categories = {
+    'Aquatike': '🐠 Aquatike',
+    'Beginner': '🏊 Beginner',
+    'Teen & Adult': '👨 Teen & Adult',
+    'Therapy': '🏥 Therapy',
+    'Preschool': '🧒 Preschool'
+  };
+  
+  return categories[this.programCategory] || this.programCategory;
+};
+
+/**
+ * ✅ Get status label
+ */
+studentSchema.methods.getStatusLabel = function() {
+  const statuses = {
+    'Aktif': '✅ Aktif',
+    'Non-Aktif': '❌ Non-Aktif',
+    'Cuti': '⏸️ Cuti'
+  };
+  
+  return statuses[this.status] || this.status;
+};
 
 // ==================== STATIC METHODS ====================
 
-// Get students with overdue payments for current month
-studentSchema.statics.getOverduePayments = async function() {
-  const today = new Date();
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  
+/**
+ * ✅ Get students by payment status
+ */
+studentSchema.statics.getByPaymentStatus = async function(status) {
   return this.find({
     status: 'Aktif',
-    monthlyFee: { $gt: 0 },
-    $or: [
-      {
-        'currentMonthPayment.month': currentMonth,
-        'currentMonthPayment.status': 'Overdue'
-      },
-      {
-        'currentMonthPayment.month': { $ne: currentMonth }
-      },
-      {
-        paymentStatus: 'Overdue'
-      }
-    ]
-  }).sort({ 'currentMonthPayment.status': 1, nextPaymentDue: 1 });
+    paymentStatus: status
+  }).sort({ registrationDate: -1 });
 };
 
-
-// Get students with upcoming payments (next 3 days)
-studentSchema.statics.getUpcomingPayments = async function(days = 3) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const futureDate = new Date(today);
-  futureDate.setDate(today.getDate() + days);
-  futureDate.setHours(23, 59, 59, 999);
-
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-
-  return this.find({
-    status: 'Aktif',
-    monthlyFee: { $gt: 0 },
-    'currentMonthPayment.month': currentMonth,
-    'currentMonthPayment.status': { $in: ['Pending', null] },
-    nextPaymentDue: {
-      $gte: today,
-      $lte: futureDate
-    }
-  }).sort({ nextPaymentDue: 1 });
-};
-
-
-// Get students by program type
+/**
+ * ✅ Get students by program type
+ */
 studentSchema.statics.getByProgramType = async function(programType) {
   return this.find({
     status: 'Aktif',
@@ -430,17 +380,9 @@ studentSchema.statics.getByProgramType = async function(programType) {
   }).sort({ registrationDate: -1 });
 };
 
-
-// Get students by program category
-studentSchema.statics.getByProgramCategory = async function(programCategory) {
-  return this.find({
-    status: 'Aktif',
-    programCategory: programCategory
-  }).sort({ registrationDate: -1 });
-};
-
-
-// Get students by training day
+/**
+ * ✅ Get students by training day
+ */
 studentSchema.statics.getByTrainingDay = async function(trainingDay) {
   return this.find({
     status: 'Aktif',
@@ -448,8 +390,20 @@ studentSchema.statics.getByTrainingDay = async function(trainingDay) {
   }).sort({ fullName: 1 });
 };
 
+/**
+ * ✅ Get students by training day and program
+ */
+studentSchema.statics.getByDayAndProgram = async function(trainingDay, programType) {
+  return this.find({
+    status: 'Aktif',
+    trainingDay,
+    programType
+  }).sort({ fullName: 1 });
+};
 
-// Get statistics
+/**
+ * ✅ Get statistics
+ */
 studentSchema.statics.getStatistics = async function() {
   const stats = await this.aggregate([
     {
@@ -459,107 +413,94 @@ studentSchema.statics.getStatistics = async function() {
       $group: {
         _id: null,
         totalActive: { $sum: 1 },
-        byProgramType: {
+        byPaymentStatus: {
           $push: {
-            programType: '$programType',
+            status: '$paymentStatus',
             count: 1
           }
         },
-        byProgramCategory: {
+        byProgram: {
+          $push: {
+            program: '$programType',
+            count: 1
+          }
+        },
+        byCategory: {
           $push: {
             category: '$programCategory',
             count: 1
           }
         },
-        byTrainingDay: {
+        byDay: {
           $push: {
             day: '$trainingDay',
             count: 1
           }
-        },
-        totalMonthlyRevenue: { $sum: '$monthlyFee' },
-        totalUnpaidAmount: { $sum: '$totalUnpaid' }
+        }
+      }
+    },
+    {
+      $facet: {
+        summary: [
+          {
+            $project: {
+              totalActive: 1,
+              totalByPaymentStatus: { $size: '$byPaymentStatus' },
+              totalByProgram: { $size: '$byProgram' }
+            }
+          }
+        ],
+        details: [
+          {
+            $project: {
+              byPaymentStatus: '$byPaymentStatus',
+              byProgram: '$byProgram',
+              byCategory: '$byCategory',
+              byDay: '$byDay'
+            }
+          }
+        ]
       }
     }
   ]);
-  
-  return stats[0] || {};
+
+  return stats[0] || { summary: [], details: [] };
 };
 
-
-// Reset payment status for new month (called by cron job)
-studentSchema.statics.resetForNewMonth = async function() {
-  const today = new Date();
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  
-  console.log(`🔄 Resetting payment status for month: ${currentMonth}`);
-  
-  const students = await this.find({
-    status: 'Aktif',
-    monthlyFee: { $gt: 0 },
+/**
+ * ✅ Search students
+ */
+studentSchema.statics.searchStudents = async function(query) {
+  return this.find({
     $or: [
-      { 'currentMonthPayment.month': { $ne: currentMonth } },
-      { 'currentMonthPayment': { $exists: false } }
+      { fullName: { $regex: query, $options: 'i' } },
+      { studentId: { $regex: query, $options: 'i' } },
+      { phone: { $regex: query, $options: 'i' } },
+      { parentName: { $regex: query, $options: 'i' } }
     ]
-  });
-  
-  let updatedCount = 0;
-  
-  for (const student of students) {
-    const oldMonth = student.currentMonthPayment?.month || 'none';
-    
-    // Check if last month was paid
-    if (student.currentMonthPayment && student.currentMonthPayment.status !== 'Paid') {
-      student.monthsUnpaid = (student.monthsUnpaid || 0) + 1;
-      student.totalUnpaid = student.monthlyFee * student.monthsUnpaid;
-      console.log(`⚠️ ${student.fullName} - Unpaid ${oldMonth}, total unpaid: ${student.monthsUnpaid}`);
-    }
-    
-    // Reset for new month
-    student.currentMonthPayment = {
-      month: currentMonth,
-      status: 'Pending',
-      paidDate: null,
-      amount: 0
-    };
-    
-    student.paymentStatus = 'Pending';
-    
-    // Update next payment due
-    const nextDue = new Date(today.getFullYear(), today.getMonth(), student.paymentDueDate || 10);
-    if (nextDue < today) {
-      nextDue.setMonth(nextDue.getMonth() + 1);
-    }
-    student.nextPaymentDue = nextDue;
-    
-    await student.save();
-    updatedCount++;
-  }
-  
-  console.log(`✅ Updated ${updatedCount} students for month ${currentMonth}`);
-  return updatedCount;
+  }).sort({ fullName: 1 });
 };
 
+/**
+ * ✅ Get students with overdue payment
+ */
+studentSchema.statics.getOverduePayments = async function(daysOverdue = 30) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysOverdue);
 
-// Update all students payment status (called daily)
-studentSchema.statics.updateAllPaymentStatuses = async function() {
-  const students = await this.find({
+  return this.find({
     status: 'Aktif',
-    monthlyFee: { $gt: 0 }
-  });
-
-  let updatedCount = 0;
-
-  for (const student of students) {
-    student.updatePaymentStatus();
-    await student.save();
-    updatedCount++;
-  }
-
-  console.log(`✅ Updated payment status for ${updatedCount} students`);
-  return updatedCount;
+    paymentStatus: { $in: ['Belum Bayar', 'Cicilan'] },
+    registrationDate: { $lt: cutoffDate }
+  }).sort({ registrationDate: 1 });
 };
 
+/**
+ * ✅ Get students by status
+ */
+studentSchema.statics.getByStatus = async function(status) {
+  return this.find({ status }).sort({ fullName: 1 });
+};
 
 const Student = mongoose.model('Student', studentSchema);
 

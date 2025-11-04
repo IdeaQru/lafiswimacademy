@@ -1,3 +1,4 @@
+// routes/studentRoutes.js
 const express = require('express');
 const router = express.Router();
 const { uploadStudent } = require('../config/upload');
@@ -12,41 +13,72 @@ const {
   filterByStatus,
   uploadStudentPhoto,
   deleteStudentPhoto,
-  getOverduePayments,
-  getUpcomingPayments,
-  sendPaymentReminder  // TAMBAHKAN INI
-
+  sendPaymentReminder
 } = require('../controllers/studentController');
 
-// ==================== SPECIFIC ROUTES FIRST ====================
+// ==================== STATIC ROUTES FIRST (MUST BE BEFORE /:id) ====================
 
-// Stats route
+/**
+ * @route   GET /api/students/stats
+ * @desc    Get student statistics
+ */
 router.get('/stats', getStudentStats);
+// router.get('/stud', getStudent);
 
-// Payment routes
-router.get('/overdue-payments', getOverduePayments);
-router.get('/upcoming-payments', getUpcomingPayments);
-
-// Search route
+/**
+ * @route   GET /api/students/search
+ * @desc    Search students
+ */
 router.get('/search', searchStudents);
 
-// Filter route
+/**
+ * @route   GET /api/students/filter
+ * @desc    Filter students by status
+ */
 router.get('/filter', filterByStatus);
 
-// ==================== CRUD WITH :id ====================
+// ==================== COLLECTION ROUTES ====================
 
-// Photo routes
-router.post('/:id/photo', uploadStudent.single('photo'), uploadStudentPhoto);
-router.delete('/:id/photo', deleteStudentPhoto);
-
-// Main CRUD routes
+/**
+ * @route   GET /api/students
+ * @route   POST /api/students
+ */
 router.route('/')
   .get(getAllStudents)
   .post(uploadStudent.single('photo'), createStudent);
 
+// ==================== DYNAMIC ROUTES WITH :id ====================
+
+/**
+ * @route   GET /api/students/:id
+ * @route   PUT /api/students/:id
+ * @route   DELETE /api/students/:id
+ */
 router.route('/:id')
   .get(getStudentById)
   .put(uploadStudent.single('photo'), updateStudent)
   .delete(deleteStudent);
-router.post('/:id/payment-reminder', sendPaymentReminder);
+
+// ==================== PHOTO MANAGEMENT ROUTES ====================
+
+/**
+ * @route   POST /api/students/:id/photo
+ * @desc    Upload student photo
+ */
+router.post('/:id/photo', uploadStudent.single('photo'), uploadStudentPhoto);
+
+/**
+ * @route   DELETE /api/students/:id/photo
+ * @desc    Delete student photo
+ */
+router.delete('/:id/photo', deleteStudentPhoto);
+
+// ==================== PAYMENT REMINDER ROUTE ====================
+
+/**
+ * @route   POST /api/students/:id/send-reminder
+ * @desc    Send payment reminder via WhatsApp (manual)
+ */
+router.post('/:id/send-reminder', sendPaymentReminder);
+
 module.exports = router;

@@ -1,25 +1,21 @@
 // backend/src/controllers/evaluationController.js
 
+const mongoose = require('mongoose');
 const TrainingEvaluation = require('../models/TrainingEvaluation');
+const SessionCounter = require('../models/SessionCounter');
+const TrainingLogger = require('../models/TrainingLogger');
 const Schedule = require('../models/Schedule');
 const Student = require('../models/Student');
 const Coach = require('../models/Coach');
 
-// @desc    Create or update training evaluation (bulk)
-// @route   POST /api/evaluations/bulk
-// @access  Private (Coach/Admin)
+// ==================== BULK CREATE/UPDATE EVALUATION ====================
 
-
-// @desc    Create or update training evaluation (bulk)
-// @route   POST /api/evaluations/bulk
-// @access  Private (Coach/Admin)
 exports.bulkCreateEvaluation = async (req, res) => {
   try {
     const { scheduleId, coachId, trainingDate, evaluations } = req.body;
 
     console.log('📥 Received evaluation data:', JSON.stringify({ scheduleId, coachId, evaluations }, null, 2));
 
-    // Get schedule
     const schedule = await Schedule.findById(scheduleId).populate('coachId');
     
     if (!schedule) {
@@ -29,21 +25,16 @@ exports.bulkCreateEvaluation = async (req, res) => {
       });
     }
 
-    // Handle coachId - convert custom ID to ObjectId if needed
     let actualCoachObjectId;
     
     if (coachId) {
       if (coachId.match(/^[0-9a-fA-F]{24}$/)) {
-        // Already ObjectId
         actualCoachObjectId = coachId;
         console.log(`✅ Valid CoachId ObjectId: ${actualCoachObjectId}`);
       } else {
-        // Custom coach ID, lookup
-        console.log(`🔍 Looking up coach by custom ID: ${coachId}`);
         const coach = await Coach.findOne({ coachId: coachId }).lean();
         
         if (!coach) {
-          console.error(`❌ Coach not found: ${coachId}`);
           return res.status(404).json({
             success: false,
             message: `Pelatih dengan ID ${coachId} tidak ditemukan`
@@ -51,47 +42,37 @@ exports.bulkCreateEvaluation = async (req, res) => {
         }
         
         actualCoachObjectId = coach._id.toString();
-        console.log(`✅ Found coach ObjectId: ${actualCoachObjectId} for custom ID: ${coachId}`);
+        console.log(`✅ Found coach ObjectId: ${actualCoachObjectId}`);
       }
     } else {
-      // Use coach from schedule
       actualCoachObjectId = schedule.coachId._id ? schedule.coachId._id.toString() : schedule.coachId.toString();
       console.log(`✅ Using coachId from schedule: ${actualCoachObjectId}`);
     }
 
     const promises = evaluations.map(async (evalItem) => {
       try {
-        // Handle studentId - convert custom ID to ObjectId if needed
         let studentObjectId;
         
-        console.log(`🔍 Processing studentId: ${evalItem.studentId} (type: ${typeof evalItem.studentId})`);
-        
         if (evalItem.studentId.match(/^[0-9a-fA-F]{24}$/)) {
-          // It's a valid ObjectId
           studentObjectId = evalItem.studentId;
           console.log(`✅ Valid StudentId ObjectId: ${studentObjectId}`);
         } else {
-          // It's a custom ID, find the student
-          console.log(`🔍 Looking up student by custom ID: ${evalItem.studentId}`);
           const student = await Student.findOne({ studentId: evalItem.studentId }).lean();
           
           if (!student) {
-            console.error(`❌ Student not found: ${evalItem.studentId}`);
             throw new Error(`Student dengan ID ${evalItem.studentId} tidak ditemukan`);
           }
           
           studentObjectId = student._id.toString();
-          console.log(`✅ Found student ObjectId: ${studentObjectId} for custom ID: ${evalItem.studentId}`);
+          console.log(`✅ Found student ObjectId: ${studentObjectId}`);
         }
-
-        console.log(`💾 Saving evaluation for studentId: ${studentObjectId}, coachId: ${actualCoachObjectId}`);
 
         const evaluation = await TrainingEvaluation.findOneAndUpdate(
           { scheduleId, studentId: studentObjectId },
           {
             scheduleId,
             studentId: studentObjectId,
-            coachId: actualCoachObjectId,  // ← FIXED: Use ObjectId
+            coachId: actualCoachObjectId,
             trainingDate: trainingDate || schedule.date,
             attendance: evalItem.attendance,
             notes: evalItem.notes || '',
@@ -100,7 +81,8 @@ exports.bulkCreateEvaluation = async (req, res) => {
           { upsert: true, new: true }
         );
 
-        console.log(`✅ Evaluation saved for student: ${studentObjectId}`);
+        await SessionCounter.getOrCreateCounter(studentObjectId);
+        
         return evaluation;
         
       } catch (error) {
@@ -135,11 +117,8 @@ exports.bulkCreateEvaluation = async (req, res) => {
   }
 };
 
+// ==================== GET EVALUATIONS BY SCHEDULE ====================
 
-
-// @desc    Get evaluations by schedule
-// @route   GET /api/evaluations/schedule/:scheduleId
-// @access  Public
 exports.getEvaluationsBySchedule = async (req, res) => {
   try {
     const { scheduleId } = req.params;
@@ -164,15 +143,21 @@ exports.getEvaluationsBySchedule = async (req, res) => {
   }
 };
 
-// @desc    Get student attendance & notes history
-// @route   GET /api/evaluations/student/:studentId
-// @access  Public
+// ==================== GET STUDENT ATTENDANCE HISTORY ====================
+
 exports.getStudentHistory = async (req, res) => {
   try {
     const { studentId } = req.params;
     const { startDate, endDate, limit = 50 } = req.query;
 
-    const filter = { studentId };
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID'
+      });
+    }
+
+    const filter = { studentId: new mongoose.Types.ObjectId(studentId) };
     if (startDate && endDate) {
       filter.trainingDate = {
         $gte: new Date(startDate),
@@ -187,7 +172,6 @@ exports.getStudentHistory = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
 
-    // Calculate stats
     const stats = {
       totalSessions: evaluations.length,
       hadir: evaluations.filter(e => e.attendance === 'Hadir').length,
@@ -220,15 +204,24 @@ exports.getStudentHistory = async (req, res) => {
   }
 };
 
-// @desc    Get coach report (sessions with evaluations)
-// @route   GET /api/evaluations/coach-report
-// @access  Public
+// ==================== GET COACH REPORT ====================
+
 exports.getCoachReport = async (req, res) => {
   try {
     const { coachId, startDate, endDate } = req.query;
 
     const filter = {};
-    if (coachId) filter.coachId = coachId;
+    if (coachId) {
+      if (coachId.match(/^[0-9a-fA-F]{24}$/)) {
+        filter.coachId = new mongoose.Types.ObjectId(coachId);
+      } else {
+        const coach = await Coach.findOne({ coachId: coachId }).lean();
+        if (coach) {
+          filter.coachId = coach._id;
+        }
+      }
+    }
+    
     if (startDate && endDate) {
       filter.trainingDate = {
         $gte: new Date(startDate),
@@ -243,10 +236,9 @@ exports.getCoachReport = async (req, res) => {
       .sort({ trainingDate: -1 })
       .lean();
 
-    // Group by schedule
     const sessionsMap = {};
     
-    evaluations.forEach(evalItem => {  // ← FIXED: eval → evalItem
+    evaluations.forEach(evalItem => {
       const scheduleId = evalItem.scheduleId?._id?.toString();
       if (!scheduleId) return;
 
@@ -274,7 +266,6 @@ exports.getCoachReport = async (req, res) => {
 
     const sessions = Object.values(sessionsMap);
 
-    // Overall stats
     const stats = {
       totalSessions: sessions.length,
       totalEvaluations: evaluations.length,
@@ -299,12 +290,20 @@ exports.getCoachReport = async (req, res) => {
   }
 };
 
-// @desc    Delete evaluation
-// @route   DELETE /api/evaluations/:id
-// @access  Private (Admin)
+// ==================== DELETE EVALUATION ====================
+
 exports.deleteEvaluation = async (req, res) => {
   try {
-    const evaluation = await TrainingEvaluation.findById(req.params.id);
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid evaluation ID'
+      });
+    }
+
+    const evaluation = await TrainingEvaluation.findById(id);
 
     if (!evaluation) {
       return res.status(404).json({
@@ -313,11 +312,328 @@ exports.deleteEvaluation = async (req, res) => {
       });
     }
 
-    await evaluation.deleteOne();
+    console.log('🗑️ Deleting evaluation:', id);
+
+    await TrainingLogger.logDelete(evaluation.studentId, {
+      _id: evaluation._id,
+      scheduleId: evaluation.scheduleId,
+      attendance: evaluation.attendance,
+      trainingDate: evaluation.trainingDate,
+      notes: evaluation.notes,
+      coachId: evaluation.coachId
+    });
+
+    await TrainingEvaluation.findByIdAndDelete(id);
+
+    console.log('✅ Evaluation deleted successfully');
 
     res.status(200).json({
       success: true,
       message: 'Evaluasi berhasil dihapus'
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ==================== RESET CURRENT MONTH ONLY ====================
+
+/**
+ * ✅ Reset HANYA bulan ini
+ * @route   POST /api/evaluations/reset/:studentId
+ */
+exports.resetTrainingCount = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    console.log('═══════════════════════════════════════════');
+    console.log('🔄 RESET CURRENT MONTH');
+    console.log('═══════════════════════════════════════════');
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID'
+      });
+    }
+
+    const studentObjectId = new mongoose.Types.ObjectId(studentId);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    console.log(`📅 Reset for: ${currentYear}-${currentMonth}`);
+
+    // Get SessionCounter
+    const counter = await SessionCounter.getOrCreateCounter(studentObjectId);
+
+    // Get evaluations bulan ini
+    const evaluationsToDelete = await TrainingEvaluation.find({
+      studentId: studentObjectId,
+      trainingDate: {
+        $gte: new Date(currentYear, currentMonth - 1, 1),
+        $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59)
+      }
+    });
+
+    console.log(`✅ Found ${evaluationsToDelete.length} evaluations`);
+
+    // Archive
+    if (evaluationsToDelete.length > 0) {
+      await TrainingLogger.logReset(studentObjectId, currentYear, currentMonth, evaluationsToDelete);
+      console.log(`✅ Archived`);
+    }
+
+    // Delete
+    await TrainingEvaluation.deleteMany({
+      studentId: studentObjectId,
+      trainingDate: {
+        $gte: new Date(currentYear, currentMonth - 1, 1),
+        $lte: new Date(currentYear, currentMonth, 0, 23, 59, 59)
+      }
+    });
+
+    // Update counter
+    const resetResult = counter.recordReset();
+    await counter.save();
+
+    console.log('═══════════════════════════════════════════');
+    console.log('✅ RESET COMPLETE');
+    console.log('═══════════════════════════════════════════\n');
+
+    res.status(200).json({
+      success: true,
+      message: resetResult.message,
+      data: {
+        studentId: studentObjectId.toString(),
+        deletedCount: evaluationsToDelete.length,
+        resetDate: resetResult.resetDate,
+        resetCount: counter.resetCount
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ==================== RESET ALL (DELETE EVERYTHING) ====================
+
+/**
+ * ✅ Reset SEMUA - Delete everything dan move ke archive
+ * @route   POST /api/evaluations/reset-all/:studentId
+ */
+// backend/src/controllers/evaluationController.js
+
+/**
+ * ✅ Reset ALL training count - Delete everything
+ * @route   POST /api/evaluations/reset-all/:studentId
+ */
+exports.resetAllTrainingCount = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    console.log('═══════════════════════════════════════════');
+    console.log('🔄 RESET ALL TRAINING COUNT');
+    console.log('═══════════════════════════════════════════');
+
+    // Validate
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID'
+      });
+    }
+
+    const studentObjectId = new mongoose.Types.ObjectId(studentId);
+    console.log('📝 Student ID:', studentObjectId.toString());
+
+    // ==================== STEP 1: Get ALL evaluations ====================
+    console.log('\n📋 STEP 1: Getting ALL evaluations...');
+    let allEvaluations;
+    try {
+      allEvaluations = await TrainingEvaluation.find({
+        studentId: studentObjectId
+      });
+      console.log(`✅ Found ${allEvaluations.length} total`);
+    } catch (error) {
+      console.error('❌ STEP 1 FAILED:', error.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Error getting evaluations: ' + error.message
+      });
+    }
+
+    // ==================== STEP 2: Group by year-month ====================
+    console.log('\n💾 STEP 2: Grouping by month...');
+    const grouped = {};
+    
+    // ✅ RENAMED: eval → evaluation (eval is reserved word)
+    allEvaluations.forEach(evaluation => {
+      try {
+        const date = new Date(evaluation.trainingDate);
+        const year = date.getFullYear();
+        const month = date.getMonth() + 1;
+        const key = `${year}-${month}`;
+        
+        if (!grouped[key]) {
+          grouped[key] = [];
+        }
+        grouped[key].push(evaluation);
+      } catch (error) {
+        console.error('❌ Error grouping evaluation:', error.message);
+      }
+    });
+
+    console.log(`📊 Grouped into ${Object.keys(grouped).length} month(s)`);
+    Object.entries(grouped).forEach(([key, evals]) => {
+      console.log(`   - ${key}: ${evals.length} evaluations`);
+    });
+
+    // ==================== STEP 3: Archive each month ====================
+    console.log('\n💾 STEP 3: Archiving to TrainingLogger...');
+    try {
+      for (const [monthKey, evaluations] of Object.entries(grouped)) {
+        const [year, month] = monthKey.split('-');
+        console.log(`   📝 Archiving ${evaluations.length} from ${monthKey}...`);
+        
+        await TrainingLogger.logReset(
+          studentObjectId,
+          parseInt(year),
+          parseInt(month),
+          evaluations
+        );
+        console.log(`      ✅ Archived`);
+      }
+    } catch (error) {
+      console.error('❌ STEP 3 FAILED:', error.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Error archiving: ' + error.message
+      });
+    }
+
+    // ==================== STEP 4: Delete ALL from TrainingEvaluation ====================
+    console.log('\n🗑️ STEP 4: Deleting ALL from TrainingEvaluation...');
+    let deleteResult;
+    try {
+      deleteResult = await TrainingEvaluation.deleteMany({
+        studentId: studentObjectId
+      });
+      console.log(`✅ Deleted ${deleteResult.deletedCount}`);
+    } catch (error) {
+      console.error('❌ STEP 4 FAILED:', error.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Error deleting evaluations: ' + error.message
+      });
+    }
+
+    // ==================== STEP 5: Update SessionCounter ====================
+    console.log('\n📊 STEP 5: Updating SessionCounter...');
+    let counter, resetResult;
+    try {
+      counter = await SessionCounter.getOrCreateCounter(studentObjectId);
+      resetResult = counter.recordReset();
+      await counter.save();
+      
+      console.log('✅ SessionCounter updated');
+      console.log(`   - Total resets: ${counter.resetCount}`);
+      console.log(`   - Last reset: ${counter.lastResetDate}`);
+    } catch (error) {
+      console.error('❌ STEP 5 FAILED:', error.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Error updating counter: ' + error.message
+      });
+    }
+
+    console.log('\n═══════════════════════════════════════════');
+    console.log('✅ RESET ALL COMPLETE');
+    console.log('═══════════════════════════════════════════\n');
+
+    res.status(200).json({
+      success: true,
+      message: `Semua ${allEvaluations.length} training records telah di-archive dan dihapus`,
+      data: {
+        studentId: studentObjectId.toString(),
+        totalDeleted: allEvaluations.length,
+        monthsArchived: Object.keys(grouped).length,
+        resetDate: resetResult.resetDate,
+        totalResets: counter.resetCount
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ CRITICAL ERROR:', error);
+    console.error('Stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+
+// ==================== GET TRAINING PROGRESS ====================
+
+/**
+ * ✅ Get training progress
+ */
+exports.getTrainingProgress = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid student ID'
+      });
+    }
+
+    console.log('📊 Getting training progress for:', studentId);
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // Get count bulan ini
+    const monthCount = await TrainingLogger.getTotalForMonth(
+      studentId,
+      currentYear,
+      currentMonth
+    );
+
+    // Get total semua waktu
+    const totalCount = await TrainingEvaluation.getTotalCount(studentId);
+
+    // Get counter info
+    const counter = await SessionCounter.getOrCreateCounter(studentId);
+    const counterStatus = await counter.getStatus();
+
+    const progress = {
+      monthCount,
+      totalCount,
+      carryOver: Math.max(0, totalCount - monthCount),
+      message: `${monthCount} bulan ini, ${Math.max(0, totalCount - monthCount)} sebelumnya = ${totalCount} total`
+    };
+
+    console.log('✅ Progress retrieved:', progress);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...progress,
+        counter: counterStatus
+      }
     });
   } catch (error) {
     console.error('❌ Error:', error);

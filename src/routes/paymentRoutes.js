@@ -3,24 +3,33 @@ const express = require('express');
 const router = express.Router();
 const {
   getAllPayments,
-  getPaymentsByStudent,
+  getPaymentStats,
   createPayment,
+  updatePayment,
   deletePayment,
-  getPaymentStats
+  getMonthlyRevenue
 } = require('../controllers/paymentController');
 
-// Stats route (must be before /:id)
+// ==================== STATIC ROUTES FIRST ====================
+// These MUST come before /:id routes
+
+// Get statistics
 router.get('/stats', getPaymentStats);
 
-// Get payments for specific student
-router.get('/student/:studentId', getPaymentsByStudent);
+// Get revenue for specific month
+router.get('/revenue/:year/:month', getMonthlyRevenue);
 
-// Main routes
-router.route('/')
+// ==================== MAIN CRUD ROUTES ====================
+// Get all payments & Create payment
+router
+  .route('/')
   .get(getAllPayments)
   .post(createPayment);
 
-router.route('/:id')
+// Update & Delete payment
+router
+  .route('/:id')
+  .put(updatePayment)
   .delete(deletePayment);
 
 module.exports = router;
