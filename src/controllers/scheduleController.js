@@ -1,15 +1,91 @@
+// backend/src/controllers/scheduleController.js
+
 const Schedule = require('../models/Schedule');
 const whatsappService = require('../services/whatsappService');
 
-// Helper function untuk format pesan reminder COACH
+// ==================== DATE HELPERS ====================
+
+/**
+ * ✅ Normalize date ke local YYYY-MM-DD (00:00:00)
+ */
+const normalizeDate = (date) => {
+  try {
+    if (!date) return null;
+
+    let d;
+    
+    if (typeof date === 'string') {
+      if (date.includes('T')) {
+        // ISO format
+        d = new Date(date);
+      } else if (date.includes('-')) {
+        // YYYY-MM-DD
+        d = new Date(date + 'T00:00:00');
+      } else {
+        d = new Date(date);
+      }
+    } else if (date instanceof Date) {
+      d = new Date(date);
+    } else {
+      d = new Date(date);
+    }
+
+    if (isNaN(d.getTime())) {
+      console.warn('Invalid date:', date);
+      return null;
+    }
+
+    // ✅ Strip ke local midnight
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+  } catch (error) {
+    console.error('Error normalizing date:', error);
+    return null;
+  }
+};
+
+/**
+ * ✅ Format date untuk WhatsApp
+ */
+const formatDateForMessage = (date) => {
+  try {
+    const d = new Date(date);
+    return d.toLocaleDateString('id-ID', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  } catch (error) {
+    console.warn('Error formatting date:', error);
+    return date?.toString() || 'N/A';
+  }
+};
+
+/**
+ * ✅ Get date range untuk query
+ */
+const getDateRange = (startDate, endDate) => {
+  const start = normalizeDate(startDate);
+  const end = normalizeDate(endDate);
+
+  if (!start || !end) {
+    throw new Error('Invalid date range');
+  }
+
+  if (start > end) {
+    return { $gte: end, $lte: start };
+  }
+
+  return { $gte: start, $lte: end };
+};
+
+// ==================== MESSAGE FORMATTERS ====================
+
+/**
+ * ✅ Format reminder message untuk coach
+ */
 const formatReminderMessage = (schedule) => {
-  const date = new Date(schedule.date);
-  const formattedDate = date.toLocaleDateString('id-ID', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  const formattedDate = formatDateForMessage(schedule.date);
 
   return `👨‍🏫 *Pengingat Jadwal Mengajar - Lafi Swimming Academy*
 
@@ -22,7 +98,7 @@ Pengingat jadwal mengajar Anda:
 👨‍🎓 *Siswa:* ${schedule.studentName}
 📱 *HP Siswa:* ${schedule.studentPhone}
 🏊 *Program:* ${schedule.program}
-📍 *Lokasi:* ${schedule.location}
+${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location}
 
 Mohon persiapkan materi dan peralatan yang diperlukan.
 
@@ -31,15 +107,11 @@ Terima kasih! 💪
 📱 WA: 0821-4004-4677`;
 };
 
-// Helper function untuk format pesan konfirmasi COACH
+/**
+ * ✅ Format confirmation message untuk coach
+ */
 const formatConfirmationMessage = (schedule) => {
-  const date = new Date(schedule.date);
-  const formattedDate = date.toLocaleDateString('id-ID', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  const formattedDate = formatDateForMessage(schedule.date);
 
   return `✅ *Jadwal Mengajar Baru - Lafi Swimming Academy*
 
@@ -52,7 +124,7 @@ Anda dijadwalkan untuk mengajar:
 👨‍🎓 *Siswa:* ${schedule.studentName}
 📱 *HP Siswa:* ${schedule.studentPhone}
 🏊 *Program:* ${schedule.program}
-📍 *Lokasi:* ${schedule.location}
+${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location}
 
 Anda akan menerima pengingat 24 jam sebelum jadwal.
 
@@ -61,227 +133,270 @@ Terima kasih! 💪
 📱 WA: 0821-4004-4677`;
 };
 
-// Get all schedules with filters
+// ==================== HELPERS ====================
+
+/**
+ * ✅ Transform schedule response
+ */
+const transformSchedule = (schedule) => {
+  return {
+    ...schedule,
+    studentId: schedule.studentId?._id?.toString() || schedule.studentId,
+    coachId: schedule.coachId?._id?.toString() || schedule.coachId,
+    studentName: schedule.studentId?.fullName || schedule.studentName,
+    coachName: schedule.coachId?.fullName || schedule.coachName,
+    studentPhone: schedule.studentId?.phone || schedule.studentPhone,
+    coachPhone: schedule.coachId?.phone || schedule.coachPhone
+  };
+};
+
+// ==================== CRUD OPERATIONS ====================
+
+/**
+ * ✅ Get all schedules
+ */
 exports.getSchedules = async (req, res) => {
   try {
+    console.log('📋 GET /schedules');
+
     const schedules = await Schedule.find()
       .populate('studentId', '_id fullName phone')
       .populate('coachId', '_id fullName phone')
       .sort({ date: -1 })
       .lean();
 
-    // Transform to include IDs and flatten data
-    const transformedSchedules = schedules.map(schedule => ({
-      ...schedule,
-      studentId: schedule.studentId?._id?.toString() || schedule.studentId,
-      coachId: schedule.coachId?._id?.toString() || schedule.coachId,
-      studentName: schedule.studentId?.fullName || schedule.studentName,
-      coachName: schedule.coachId?.fullName || schedule.coachName,
-      studentPhone: schedule.studentId?.phone || schedule.studentPhone,
-      coachPhone: schedule.coachId?.phone || schedule.coachPhone
-    }));
+    const transformed = schedules.map(transformSchedule);
+
+    console.log(`✅ Found ${transformed.length} schedules`);
 
     res.status(200).json({
       success: true,
-      count: transformedSchedules.length,
-      data: transformedSchedules
+      count: transformed.length,
+      data: transformed
     });
   } catch (error) {
-    console.error('Error getting schedules:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Gagal mengambil data jadwal', 
-      error: error.message 
+      message: 'Gagal mengambil data jadwal',
+      error: error.message
     });
   }
 };
 
-// Get schedules by date range
+/**
+ * ✅ Get schedules by date range
+ */
 exports.getSchedulesByDateRange = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
+    console.log('📋 GET /schedules/range');
+    console.log('   Input startDate:', startDate);
+    console.log('   Input endDate:', endDate);
+
     if (!startDate || !endDate) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Start date and end date are required' 
+        message: 'Start date and end date are required'
       });
     }
 
+    // ✅ Normalize dates
+    const dateRange = getDateRange(startDate, endDate);
+
+    console.log('   Query range:', {
+      $gte: dateRange.$gte.toISOString(),
+      $lte: dateRange.$lte.toISOString()
+    });
+
     const schedules = await Schedule.find({
-      date: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      }
+      date: dateRange
     })
       .sort({ date: 1, startTime: 1 })
       .populate('studentId', '_id fullName phone')
       .populate('coachId', '_id fullName phone')
       .lean();
 
-    // Transform data
-    const transformedSchedules = schedules.map(schedule => ({
-      ...schedule,
-      studentId: schedule.studentId?._id?.toString() || schedule.studentId,
-      coachId: schedule.coachId?._id?.toString() || schedule.coachId,
-      studentName: schedule.studentId?.fullName || schedule.studentName,
-      coachName: schedule.coachId?.fullName || schedule.coachName,
-      studentPhone: schedule.studentId?.phone || schedule.studentPhone,
-      coachPhone: schedule.coachId?.phone || schedule.coachPhone
-    }));
+    const transformed = schedules.map(transformSchedule);
+
+    console.log(`✅ Found ${transformed.length} schedules`);
 
     res.json({
       success: true,
-      count: transformedSchedules.length,
-      data: transformedSchedules
+      count: transformed.length,
+      data: transformed
     });
   } catch (error) {
-    console.error('Error getting schedules by date range:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Server error', 
-      error: error.message 
+      message: 'Server error',
+      error: error.message
     });
   }
 };
 
-// Get schedule by ID
+/**
+ * ✅ Get schedule by ID
+ */
 exports.getScheduleById = async (req, res) => {
   try {
+    console.log('📋 GET /schedules/:id');
+    console.log('   ID:', req.params.id);
+
     const schedule = await Schedule.findById(req.params.id)
       .populate('studentId', '_id fullName phone')
       .populate('coachId', '_id fullName phone')
       .lean();
 
     if (!schedule) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Schedule not found' 
+        message: 'Schedule not found'
       });
     }
 
-    // Transform data
-    const transformedSchedule = {
-      ...schedule,
-      studentId: schedule.studentId?._id?.toString() || schedule.studentId,
-      coachId: schedule.coachId?._id?.toString() || schedule.coachId,
-      studentName: schedule.studentId?.fullName || schedule.studentName,
-      coachName: schedule.coachId?.fullName || schedule.coachName,
-      studentPhone: schedule.studentId?.phone || schedule.studentPhone,
-      coachPhone: schedule.coachId?.phone || schedule.coachPhone
-    };
+    const transformed = transformSchedule(schedule);
+
+    console.log('✅ Schedule found');
 
     res.json({
       success: true,
-      data: transformedSchedule
+      data: transformed
     });
   } catch (error) {
-    console.error('Error getting schedule:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Server error', 
-      error: error.message 
+      message: 'Server error',
+      error: error.message
     });
   }
 };
 
-// Get schedules by coach
+/**
+ * ✅ Get schedules by coach
+ */
 exports.getSchedulesByCoach = async (req, res) => {
   try {
-    const schedules = await Schedule.find({ coachId: req.params.coachId })
+    console.log('📋 GET /schedules/coach/:coachId');
+    console.log('   Coach ID:', req.params.coachId);
+
+    const schedules = await Schedule.find({
+      coachId: req.params.coachId
+    })
       .sort({ date: 1, startTime: 1 })
       .populate('studentId', '_id fullName phone')
-      .lean();
-
-    // Transform data
-    const transformedSchedules = schedules.map(schedule => ({
-      ...schedule,
-      studentId: schedule.studentId?._id?.toString() || schedule.studentId,
-      studentName: schedule.studentId?.fullName || schedule.studentName,
-      studentPhone: schedule.studentId?.phone || schedule.studentPhone
-    }));
-
-    res.json({
-      success: true,
-      count: transformedSchedules.length,
-      data: transformedSchedules
-    });
-  } catch (error) {
-    console.error('Error getting coach schedules:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Server error', 
-      error: error.message 
-    });
-  }
-};
-
-// Get schedules by student
-exports.getSchedulesByStudent = async (req, res) => {
-  try {
-    const schedules = await Schedule.find({ studentId: req.params.studentId })
-      .sort({ date: 1, startTime: 1 })
       .populate('coachId', '_id fullName phone')
       .lean();
 
-    // Transform data
-    const transformedSchedules = schedules.map(schedule => ({
-      ...schedule,
-      coachId: schedule.coachId?._id?.toString() || schedule.coachId,
-      coachName: schedule.coachId?.fullName || schedule.coachName,
-      coachPhone: schedule.coachId?.phone || schedule.coachPhone
-    }));
+    const transformed = schedules.map(transformSchedule);
+
+    console.log(`✅ Found ${transformed.length} schedules`);
 
     res.json({
       success: true,
-      count: transformedSchedules.length,
-      data: transformedSchedules
+      count: transformed.length,
+      data: transformed
     });
   } catch (error) {
-    console.error('Error getting student schedules:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Server error', 
-      error: error.message 
+      message: 'Server error',
+      error: error.message
     });
   }
 };
 
-// Create new schedule
+/**
+ * ✅ Get schedules by student
+ */
+exports.getSchedulesByStudent = async (req, res) => {
+  try {
+    console.log('📋 GET /schedules/student/:studentId');
+    console.log('   Student ID:', req.params.studentId);
+
+    const schedules = await Schedule.find({
+      studentId: req.params.studentId
+    })
+      .sort({ date: 1, startTime: 1 })
+      .populate('coachId', '_id fullName phone')
+      .populate('studentId', '_id fullName phone')
+      .lean();
+
+    const transformed = schedules.map(transformSchedule);
+
+    console.log(`✅ Found ${transformed.length} schedules`);
+
+    res.json({
+      success: true,
+      count: transformed.length,
+      data: transformed
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * ✅ Create schedule
+ */
 exports.createSchedule = async (req, res) => {
   try {
-    const schedule = new Schedule(req.body);
+    console.log('📝 POST /schedules');
+    console.log('   Data:', req.body);
+
+    // ✅ Normalize date
+    const normalizedDate = normalizeDate(req.body.date);
+
+    if (!normalizedDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
+    const scheduleData = {
+      ...req.body,
+      date: normalizedDate
+    };
+
+    const schedule = new Schedule(scheduleData);
     await schedule.save();
 
-    // Populate untuk mendapatkan data lengkap
-    await schedule.populate('studentId', 'fullName phone');
-    await schedule.populate('coachId', 'fullName phone');
+    await schedule.populate('studentId', '_id fullName phone');
+    await schedule.populate('coachId', '_id fullName phone');
 
-    // Send WhatsApp confirmation to COACH only
+    console.log('✅ Schedule created:', schedule._id);
+
+    // Send WhatsApp confirmation to COACH
     if (schedule.reminderEnabled && whatsappService.isReady()) {
       try {
         const coachPhone = schedule.coachId?.phone || schedule.coachPhone;
         const coachName = schedule.coachId?.fullName || schedule.coachName;
-        
+
         if (coachPhone) {
-          // Prepare schedule data for message
-          const scheduleData = {
+          const scheduleObj = {
             ...schedule.toObject(),
             coachName,
             coachPhone,
             studentName: schedule.studentId?.fullName || schedule.studentName,
             studentPhone: schedule.studentId?.phone || schedule.studentPhone
           };
-          
-          const message = formatConfirmationMessage(scheduleData);
+
+          const message = formatConfirmationMessage(scheduleObj);
           await whatsappService.sendMessage(coachPhone, message);
-          console.log(`✅ Coach confirmation sent to ${coachPhone}`);
-        } else {
-          console.log('⚠️ Coach phone not available');
+          console.log(`✅ Confirmation sent to ${coachPhone}`);
         }
       } catch (waError) {
-        console.error('⚠️ Failed to send confirmation:', waError.message);
-        // Don't fail the request if WhatsApp fails
+        console.error('⚠️ WhatsApp error:', waError.message);
       }
     }
 
@@ -291,32 +406,56 @@ exports.createSchedule = async (req, res) => {
       data: schedule
     });
   } catch (error) {
-    console.error('Error creating schedule:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Gagal membuat jadwal', 
-      error: error.message 
+      message: 'Gagal membuat jadwal',
+      error: error.message
     });
   }
 };
 
-// Update schedule
+/**
+ * ✅ Update schedule
+ */
 exports.updateSchedule = async (req, res) => {
   try {
+    console.log('🔄 PUT /schedules/:id');
+    console.log('   ID:', req.params.id);
+
+    let updateData = { ...req.body };
+
+    // ✅ Normalize date if present
+    if (updateData.date) {
+      const normalized = normalizeDate(updateData.date);
+      if (!normalized) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid date format'
+        });
+      }
+      updateData.date = normalized;
+      console.log('   Normalized date:', normalized.toISOString());
+    }
+
+    updateData.updatedAt = Date.now();
+
     const schedule = await Schedule.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, updatedAt: Date.now() },
+      updateData,
       { new: true, runValidators: true }
     )
       .populate('studentId', '_id fullName phone')
       .populate('coachId', '_id fullName phone');
 
     if (!schedule) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Schedule not found' 
+        message: 'Schedule not found'
       });
     }
+
+    console.log('✅ Schedule updated');
 
     res.json({
       success: true,
@@ -324,45 +463,57 @@ exports.updateSchedule = async (req, res) => {
       data: schedule
     });
   } catch (error) {
-    console.error('Error updating schedule:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Gagal update jadwal', 
-      error: error.message 
+      message: 'Gagal update jadwal',
+      error: error.message
     });
   }
 };
 
-// Delete schedule
+/**
+ * ✅ Delete schedule
+ */
 exports.deleteSchedule = async (req, res) => {
   try {
+    console.log('🗑️ DELETE /schedules/:id');
+    console.log('   ID:', req.params.id);
+
     const schedule = await Schedule.findByIdAndDelete(req.params.id);
 
     if (!schedule) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Schedule not found' 
+        message: 'Schedule not found'
       });
     }
 
-    res.json({ 
+    console.log('✅ Schedule deleted');
+
+    res.json({
       success: true,
-      message: 'Schedule deleted successfully' 
+      message: 'Schedule deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting schedule:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Gagal menghapus jadwal', 
-      error: error.message 
+      message: 'Gagal menghapus jadwal',
+      error: error.message
     });
   }
 };
 
-// Update schedule status
+/**
+ * ✅ Update schedule status
+ */
 exports.updateScheduleStatus = async (req, res) => {
   try {
     const { status } = req.body;
+
+    console.log('📊 PATCH /schedules/:id/status');
+    console.log('   Status:', status);
 
     if (!status) {
       return res.status(400).json({
@@ -380,11 +531,13 @@ exports.updateScheduleStatus = async (req, res) => {
       .populate('coachId', '_id fullName phone');
 
     if (!schedule) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Schedule not found' 
+        message: 'Schedule not found'
       });
     }
+
+    console.log('✅ Status updated');
 
     res.json({
       success: true,
@@ -392,19 +545,24 @@ exports.updateScheduleStatus = async (req, res) => {
       data: schedule
     });
   } catch (error) {
-    console.error('Error updating schedule status:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Gagal update status', 
-      error: error.message 
+      message: 'Gagal update status',
+      error: error.message
     });
   }
 };
 
-// Toggle reminder
+/**
+ * ✅ Toggle reminder
+ */
 exports.toggleReminder = async (req, res) => {
   try {
     const { reminderEnabled } = req.body;
+
+    console.log('🔔 PATCH /schedules/:id/reminder');
+    console.log('   Enabled:', reminderEnabled);
 
     if (typeof reminderEnabled !== 'boolean') {
       return res.status(400).json({
@@ -420,11 +578,13 @@ exports.toggleReminder = async (req, res) => {
     );
 
     if (!schedule) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Schedule not found' 
+        message: 'Schedule not found'
       });
     }
+
+    console.log('✅ Reminder toggled');
 
     res.json({
       success: true,
@@ -432,51 +592,52 @@ exports.toggleReminder = async (req, res) => {
       data: schedule
     });
   } catch (error) {
-    console.error('Error toggling reminder:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Gagal toggle reminder', 
-      error: error.message 
+      message: 'Gagal toggle reminder',
+      error: error.message
     });
   }
 };
 
-// Send WhatsApp reminder manually (COACH only)
+/**
+ * ✅ Send WhatsApp reminder manually
+ */
 exports.sendWhatsAppReminder = async (req, res) => {
   try {
+    console.log('📱 POST /schedules/:id/send-whatsapp-reminder');
+    console.log('   ID:', req.params.id);
+
     const schedule = await Schedule.findById(req.params.id)
       .populate('studentId', 'fullName phone')
       .populate('coachId', 'fullName phone');
 
     if (!schedule) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Schedule not found' 
+        message: 'Schedule not found'
       });
     }
 
-    // Check if WhatsApp is ready
     if (!whatsappService.isReady()) {
-      return res.status(503).json({ 
-        success: false, 
-        message: 'WhatsApp service is not ready. Please check connection.' 
+      return res.status(503).json({
+        success: false,
+        message: 'WhatsApp service is not ready'
       });
     }
 
-    // Get coach phone
     const coachPhone = schedule.coachId?.phone || schedule.coachPhone;
     const coachName = schedule.coachId?.fullName || schedule.coachName;
 
-    // Check if coach phone exists
     if (!coachPhone) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Nomor HP coach tidak tersedia' 
+      return res.status(400).json({
+        success: false,
+        message: 'Nomor HP coach tidak tersedia'
       });
     }
 
-    // Prepare schedule data for message
-    const scheduleData = {
+    const scheduleObj = {
       ...schedule.toObject(),
       coachName,
       coachPhone,
@@ -484,19 +645,17 @@ exports.sendWhatsAppReminder = async (req, res) => {
       studentPhone: schedule.studentId?.phone || schedule.studentPhone
     };
 
-    // Send reminder to COACH
-    const message = formatReminderMessage(scheduleData);
+    const message = formatReminderMessage(scheduleObj);
     await whatsappService.sendMessage(coachPhone, message);
 
-    // Update reminder status
     schedule.reminderSent = true;
     schedule.reminderSentAt = new Date();
     await schedule.save();
 
-    console.log(`✅ Coach reminder sent to ${coachPhone}`);
+    console.log(`✅ Reminder sent to ${coachPhone}`);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: `Pengingat WhatsApp berhasil dikirim ke Coach ${coachName}!`,
       data: {
         recipient: coachPhone,
@@ -504,21 +663,25 @@ exports.sendWhatsAppReminder = async (req, res) => {
         sentAt: new Date()
       }
     });
-
   } catch (error) {
-    console.error('Error sending WhatsApp reminder:', error);
-    res.status(500).json({ 
-      success: false, 
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
       message: 'Gagal mengirim pengingat WhatsApp',
-      error: error.message 
+      error: error.message
     });
   }
 };
 
-// Check schedule conflicts
+/**
+ * ✅ Check schedule conflicts
+ */
 exports.checkConflicts = async (req, res) => {
   try {
     const { coachId, date, startTime, endTime, scheduleId } = req.body;
+
+    console.log('⚠️ POST /schedules/check-conflicts');
+    console.log('   Coach:', coachId, 'Date:', date);
 
     if (!coachId || !date || !startTime || !endTime) {
       return res.status(400).json({
@@ -527,14 +690,19 @@ exports.checkConflicts = async (req, res) => {
       });
     }
 
-    const queryDate = new Date(date);
-    const startOfDay = new Date(queryDate.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(queryDate.setHours(23, 59, 59, 999));
+    // ✅ Normalize date
+    const queryDate = normalizeDate(date);
 
-    // Build query
+    if (!queryDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
+
     const query = {
       coachId,
-      date: { $gte: startOfDay, $lte: endOfDay },
+      date: queryDate,
       status: { $ne: 'cancelled' },
       $or: [
         {
@@ -558,7 +726,6 @@ exports.checkConflicts = async (req, res) => {
       ]
     };
 
-    // Exclude current schedule when updating
     if (scheduleId) {
       query._id = { $ne: scheduleId };
     }
@@ -567,6 +734,8 @@ exports.checkConflicts = async (req, res) => {
       .populate('studentId', 'fullName')
       .populate('coachId', 'fullName');
 
+    console.log(`✅ Found ${conflicts.length} conflicts`);
+
     res.json({
       success: true,
       hasConflict: conflicts.length > 0,
@@ -574,11 +743,11 @@ exports.checkConflicts = async (req, res) => {
       conflicts
     });
   } catch (error) {
-    console.error('Error checking conflicts:', error);
-    res.status(500).json({ 
+    console.error('❌ Error:', error);
+    res.status(500).json({
       success: false,
-      message: 'Server error', 
-      error: error.message 
+      message: 'Server error',
+      error: error.message
     });
   }
 };
