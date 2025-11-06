@@ -23,7 +23,6 @@ Pengingat jadwal mengajar Anda *BESOK*:
 📅 *Tanggal:* ${formattedDate}
 ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
 👨‍🎓 *Siswa:* ${schedule.studentName}
-📱 *HP Siswa:* ${schedule.studentPhone}
 🏊 *Program:* ${schedule.program}
 📍 *Lokasi:* ${schedule.location}
 

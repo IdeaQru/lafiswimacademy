@@ -13,13 +13,11 @@ const normalizeDate = (date) => {
     if (!date) return null;
 
     let d;
-    
+
     if (typeof date === 'string') {
       if (date.includes('T')) {
-        // ISO format
         d = new Date(date);
       } else if (date.includes('-')) {
-        // YYYY-MM-DD
         d = new Date(date + 'T00:00:00');
       } else {
         d = new Date(date);
@@ -35,7 +33,6 @@ const normalizeDate = (date) => {
       return null;
     }
 
-    // ✅ Strip ke local midnight
     return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
   } catch (error) {
     console.error('Error normalizing date:', error);
@@ -82,9 +79,9 @@ const getDateRange = (startDate, endDate) => {
 // ==================== MESSAGE FORMATTERS ====================
 
 /**
- * ✅ Format reminder message untuk coach
+ * ✅ Format reminder message untuk PRIVATE schedule (1:1)
  */
-const formatReminderMessage = (schedule) => {
+const formatPrivateReminderMessage = (schedule) => {
   const formattedDate = formatDateForMessage(schedule.date);
 
   return `👨‍🏫 *Pengingat Jadwal Mengajar - Lafi Swimming Academy*
@@ -96,9 +93,9 @@ Pengingat jadwal mengajar Anda:
 📅 *Tanggal:* ${formattedDate}
 ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
 👨‍🎓 *Siswa:* ${schedule.studentName}
-📱 *HP Siswa:* ${schedule.studentPhone}
 🏊 *Program:* ${schedule.program}
 ${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location}
+⏱️ *Durasi:* ${schedule.duration} menit
 
 Mohon persiapkan materi dan peralatan yang diperlukan.
 
@@ -108,12 +105,44 @@ Terima kasih! 💪
 };
 
 /**
- * ✅ Format confirmation message untuk coach
+ * ✅ Format reminder message untuk GROUP schedule
+ */
+const formatGroupReminderMessage = (schedule) => {
+  const formattedDate = formatDateForMessage(schedule.date);
+  const studentList = schedule.students
+    ?.map(s => `• ${s.fullName}`)
+    .join('\n') || '• (Siswa tidak tersedia)';
+
+  return `👨‍🏫 *Pengingat Group Class - Lafi Swimming Academy*
+
+Halo Coach ${schedule.coachName}! 👋
+
+Pengingat group class Anda:
+
+📝 *Group:* ${schedule.groupName}
+📅 *Tanggal:* ${formattedDate}
+⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
+👨‍🎓 *Siswa (${schedule.students?.length || 0}):*
+${studentList}
+🏊 *Program:* ${schedule.program}
+${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location}
+⏱️ *Durasi:* ${schedule.duration} menit
+
+Mohon persiapkan materi dan peralatan yang diperlukan.
+
+Terima kasih! 💪
+*Lafi Swimming Academy*
+📱 WA: 0821-4004-4677`;
+};
+
+/**
+ * ✅ Format confirmation message untuk coach (support private & group)
  */
 const formatConfirmationMessage = (schedule) => {
   const formattedDate = formatDateForMessage(schedule.date);
 
-  return `✅ *Jadwal Mengajar Baru - Lafi Swimming Academy*
+  if (schedule.scheduleType === 'private') {
+    return `✅ *Jadwal Mengajar Baru - Lafi Swimming Academy*
 
 Halo Coach ${schedule.coachName}! 👋
 
@@ -122,7 +151,6 @@ Anda dijadwalkan untuk mengajar:
 📅 *Tanggal:* ${formattedDate}
 ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
 👨‍🎓 *Siswa:* ${schedule.studentName}
-📱 *HP Siswa:* ${schedule.studentPhone}
 🏊 *Program:* ${schedule.program}
 ${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location}
 
@@ -131,23 +159,110 @@ Anda akan menerima pengingat 24 jam sebelum jadwal.
 Terima kasih! 💪
 *Lafi Swimming Academy*
 📱 WA: 0821-4004-4677`;
+  } else {
+    const studentList = schedule.students
+      ?.map(s => `• ${s.fullName}`)
+      .join('\n') || '• (Siswa tidak tersedia)';
+
+    return `✅ *Group Class Baru - Lafi Swimming Academy*
+
+Halo Coach ${schedule.coachName}! 👋
+
+Anda ditambahkan ke group class baru:
+
+📝 *Group:* ${schedule.groupName}
+📅 *Tanggal:* ${formattedDate}
+⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
+👨‍🎓 *Siswa (${schedule.students?.length || 0}):*
+${studentList}
+🏊 *Program:* ${schedule.program}
+${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location}
+
+Anda akan menerima pengingat 24 jam sebelum jadwal.
+
+Terima kasih! 💪
+*Lafi Swimming Academy*
+📱 WA: 0821-4004-4677`;
+  }
 };
 
 // ==================== HELPERS ====================
 
 /**
- * ✅ Transform schedule response
+ * ✅ Transform schedule response - support both private & group
+ * PENTING: Handle coach info untuk BOTH type!
  */
 const transformSchedule = (schedule) => {
-  return {
-    ...schedule,
-    studentId: schedule.studentId?._id?.toString() || schedule.studentId,
-    coachId: schedule.coachId?._id?.toString() || schedule.coachId,
-    studentName: schedule.studentId?.fullName || schedule.studentName,
-    coachName: schedule.coachId?.fullName || schedule.coachName,
-    studentPhone: schedule.studentId?.phone || schedule.studentPhone,
-    coachPhone: schedule.coachId?.phone || schedule.coachPhone
+  const transformed = { ...schedule };
+
+  // ==================== PRIVATE SCHEDULE ====================
+  if (schedule.scheduleType === 'private') {
+    // ✅ Extract IDs untuk private
+    transformed.studentId = schedule.studentId?._id?.toString() || schedule.studentId;
+    transformed.coachId = schedule.coachId?._id?.toString() || schedule.coachId;
+    transformed.studentName = schedule.studentId?.fullName || schedule.studentName;
+    transformed.coachName = schedule.coachId?.fullName || schedule.coachName;
+    transformed.studentPhone = schedule.studentId?.phone || schedule.studentPhone;
+    transformed.coachPhone = schedule.coachId?.phone || schedule.coachPhone;
+
+    console.log(`✅ Transformed PRIVATE schedule - Coach: ${transformed.coachName}`);
+  }
+  // ==================== GROUP SCHEDULE ====================
+  else if (schedule.scheduleType === 'group') {
+    // ✅ Group schedule - extract dari coaches array
+    transformed.coachId = undefined; // coachId tetap undefined untuk group
+    
+    // ✅ Extract coach names dari coaches array
+    transformed.coachName = schedule.coaches
+      ?.map(c => c.fullName)
+      .join(', ') || 'Unknown';
+    
+    // ✅ Extract coach phones
+    transformed.coachPhone = schedule.coaches
+      ?.map(c => c.phone)
+      .join(', ') || null;
+
+    // ✅ Ensure students array exists
+    transformed.students = schedule.students || [];
+
+    console.log(
+      `✅ Transformed GROUP schedule - Coaches: ${transformed.coachName}, Students: ${transformed.students.length}`
+    );
+  }
+
+  return transformed;
+};
+
+/**
+ * ✅ Send WhatsApp to multiple recipients
+ */
+const sendMultipleMessages = async (recipients, message, label = 'Notifications') => {
+  const results = {
+    success: [],
+    failed: []
   };
+
+  for (const recipient of recipients) {
+    try {
+      if (recipient.phone) {
+        await whatsappService.sendMessage(recipient.phone, message);
+        results.success.push({
+          name: recipient.name,
+          phone: recipient.phone
+        });
+        console.log(`✅ ${label} sent to ${recipient.phone}`);
+      }
+    } catch (error) {
+      results.failed.push({
+        name: recipient.name,
+        phone: recipient.phone,
+        error: error.message
+      });
+      console.error(`❌ Failed to send to ${recipient.phone}:`, error.message);
+    }
+  }
+
+  return results;
 };
 
 // ==================== CRUD OPERATIONS ====================
@@ -202,7 +317,6 @@ exports.getSchedulesByDateRange = async (req, res) => {
       });
     }
 
-    // ✅ Normalize dates
     const dateRange = getDateRange(startDate, endDate);
 
     console.log('   Query range:', {
@@ -221,6 +335,14 @@ exports.getSchedulesByDateRange = async (req, res) => {
     const transformed = schedules.map(transformSchedule);
 
     console.log(`✅ Found ${transformed.length} schedules`);
+    console.log(
+      '   Private:',
+      transformed.filter(s => s.scheduleType === 'private').length
+    );
+    console.log(
+      '   Group:',
+      transformed.filter(s => s.scheduleType === 'group').length
+    );
 
     res.json({
       success: true,
@@ -259,7 +381,7 @@ exports.getScheduleById = async (req, res) => {
 
     const transformed = transformSchedule(schedule);
 
-    console.log('✅ Schedule found');
+    console.log('✅ Schedule found - Type:', transformed.scheduleType);
 
     res.json({
       success: true,
@@ -276,15 +398,21 @@ exports.getScheduleById = async (req, res) => {
 };
 
 /**
- * ✅ Get schedules by coach
+ * ✅ Get schedules by coach (support both private & group)
  */
 exports.getSchedulesByCoach = async (req, res) => {
   try {
     console.log('📋 GET /schedules/coach/:coachId');
     console.log('   Coach ID:', req.params.coachId);
 
+    const coachId = req.params.coachId;
+
+    // ✅ Query BOTH private schedules dan group schedules
     const schedules = await Schedule.find({
-      coachId: req.params.coachId
+      $or: [
+        { coachId: coachId, scheduleType: 'private' },
+        { 'coaches._id': coachId, scheduleType: 'group' }
+      ]
     })
       .sort({ date: 1, startTime: 1 })
       .populate('studentId', '_id fullName phone')
@@ -294,6 +422,14 @@ exports.getSchedulesByCoach = async (req, res) => {
     const transformed = schedules.map(transformSchedule);
 
     console.log(`✅ Found ${transformed.length} schedules`);
+    console.log(
+      '   Private:',
+      transformed.filter(s => s.scheduleType === 'private').length
+    );
+    console.log(
+      '   Group:',
+      transformed.filter(s => s.scheduleType === 'group').length
+    );
 
     res.json({
       success: true,
@@ -311,15 +447,21 @@ exports.getSchedulesByCoach = async (req, res) => {
 };
 
 /**
- * ✅ Get schedules by student
+ * ✅ Get schedules by student (support both private & group)
  */
 exports.getSchedulesByStudent = async (req, res) => {
   try {
     console.log('📋 GET /schedules/student/:studentId');
     console.log('   Student ID:', req.params.studentId);
 
+    const studentId = req.params.studentId;
+
+    // ✅ Query BOTH private schedules dan group schedules
     const schedules = await Schedule.find({
-      studentId: req.params.studentId
+      $or: [
+        { studentId: studentId, scheduleType: 'private' },
+        { 'students._id': studentId, scheduleType: 'group' }
+      ]
     })
       .sort({ date: 1, startTime: 1 })
       .populate('coachId', '_id fullName phone')
@@ -329,6 +471,14 @@ exports.getSchedulesByStudent = async (req, res) => {
     const transformed = schedules.map(transformSchedule);
 
     console.log(`✅ Found ${transformed.length} schedules`);
+    console.log(
+      '   Private:',
+      transformed.filter(s => s.scheduleType === 'private').length
+    );
+    console.log(
+      '   Group:',
+      transformed.filter(s => s.scheduleType === 'group').length
+    );
 
     res.json({
       success: true,
@@ -346,14 +496,13 @@ exports.getSchedulesByStudent = async (req, res) => {
 };
 
 /**
- * ✅ Create schedule
+ * ✅ Create schedule (support private & group)
  */
 exports.createSchedule = async (req, res) => {
   try {
     console.log('📝 POST /schedules');
     console.log('   Data:', req.body);
 
-    // ✅ Normalize date
     const normalizedDate = normalizeDate(req.body.date);
 
     if (!normalizedDate) {
@@ -363,10 +512,45 @@ exports.createSchedule = async (req, res) => {
       });
     }
 
+    const scheduleType = req.body.scheduleType || 'private';
+
+    if (!['private', 'group'].includes(scheduleType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid schedule type. Must be private or group'
+      });
+    }
+
     const scheduleData = {
       ...req.body,
-      date: normalizedDate
+      date: normalizedDate,
+      scheduleType
     };
+
+    const conflictData = {
+      date: normalizedDate,
+      startTime: scheduleData.startTime,
+      endTime: scheduleData.endTime,
+      scheduleType
+    };
+
+    if (scheduleType === 'private') {
+      conflictData.coachId = scheduleData.coachId;
+      conflictData.studentId = scheduleData.studentId;
+    } else {
+      conflictData.coaches = scheduleData.coachIds;
+      conflictData.students = scheduleData.studentIds;
+    }
+
+    const conflicts = await Schedule.checkConflicts(conflictData);
+
+    if (conflicts.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Schedule conflict detected',
+        conflicts
+      });
+    }
 
     const schedule = new Schedule(scheduleData);
     await schedule.save();
@@ -374,26 +558,50 @@ exports.createSchedule = async (req, res) => {
     await schedule.populate('studentId', '_id fullName phone');
     await schedule.populate('coachId', '_id fullName phone');
 
-    console.log('✅ Schedule created:', schedule._id);
+    const transformed = transformSchedule(schedule);
 
-    // Send WhatsApp confirmation to COACH
+    console.log('✅ Schedule created:', schedule._id);
+    console.log('   Type:', transformed.scheduleType);
+
+    // ✅ Send WhatsApp confirmation
     if (schedule.reminderEnabled && whatsappService.isReady()) {
       try {
-        const coachPhone = schedule.coachId?.phone || schedule.coachPhone;
-        const coachName = schedule.coachId?.fullName || schedule.coachName;
+        let recipients = [];
 
-        if (coachPhone) {
-          const scheduleObj = {
-            ...schedule.toObject(),
-            coachName,
-            coachPhone,
-            studentName: schedule.studentId?.fullName || schedule.studentName,
-            studentPhone: schedule.studentId?.phone || schedule.studentPhone
-          };
+        if (schedule.scheduleType === 'private') {
+          const coachPhone = schedule.coachId?.phone || schedule.coachPhone;
+          const coachName = schedule.coachId?.fullName || schedule.coachName;
 
-          const message = formatConfirmationMessage(scheduleObj);
-          await whatsappService.sendMessage(coachPhone, message);
-          console.log(`✅ Confirmation sent to ${coachPhone}`);
+          if (coachPhone) {
+            recipients.push({
+              name: coachName,
+              phone: coachPhone,
+              type: 'coach'
+
+            });
+          }
+        } else {
+          // ✅ GROUP: Send ke semua coaches
+          recipients = [
+            ...schedule.coaches.map(c => ({
+              name: c.fullName,
+              phone: c.phone,
+              type: 'coach'
+              
+            }))
+          ];
+        }
+
+        const scheduleObj = schedule.toObject();
+        const message = formatConfirmationMessage(scheduleObj);
+
+        if (recipients.length > 0) {
+          const results = await sendMultipleMessages(
+            recipients,
+            message,
+            'Confirmation'
+          );
+          console.log(`📱 WhatsApp results:`, results);
         }
       } catch (waError) {
         console.error('⚠️ WhatsApp error:', waError.message);
@@ -403,11 +611,11 @@ exports.createSchedule = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Jadwal berhasil dibuat',
-      data: schedule
+      data: transformed
     });
   } catch (error) {
     console.error('❌ Error:', error);
-    res.status(500).json({
+    res.status(400).json({
       success: false,
       message: 'Gagal membuat jadwal',
       error: error.message
@@ -425,7 +633,6 @@ exports.updateSchedule = async (req, res) => {
 
     let updateData = { ...req.body };
 
-    // ✅ Normalize date if present
     if (updateData.date) {
       const normalized = normalizeDate(updateData.date);
       if (!normalized) {
@@ -455,16 +662,18 @@ exports.updateSchedule = async (req, res) => {
       });
     }
 
-    console.log('✅ Schedule updated');
+    const transformed = transformSchedule(schedule);
+
+    console.log('✅ Schedule updated - Type:', transformed.scheduleType);
 
     res.json({
       success: true,
       message: 'Jadwal berhasil diupdate',
-      data: schedule
+      data: transformed
     });
   } catch (error) {
     console.error('❌ Error:', error);
-    res.status(500).json({
+    res.status(400).json({
       success: false,
       message: 'Gagal update jadwal',
       error: error.message
@@ -522,9 +731,16 @@ exports.updateScheduleStatus = async (req, res) => {
       });
     }
 
+    const updateData = { status, updatedAt: Date.now() };
+
+    if (['completed', 'cancelled'].includes(status)) {
+      updateData.archivedAt = new Date();
+      updateData.archivedReason = status;
+    }
+
     const schedule = await Schedule.findByIdAndUpdate(
       req.params.id,
-      { status, updatedAt: Date.now() },
+      updateData,
       { new: true, runValidators: true }
     )
       .populate('studentId', '_id fullName phone')
@@ -537,16 +753,18 @@ exports.updateScheduleStatus = async (req, res) => {
       });
     }
 
+    const transformed = transformSchedule(schedule);
+
     console.log('✅ Status updated');
 
     res.json({
       success: true,
       message: 'Status berhasil diupdate',
-      data: schedule
+      data: transformed
     });
   } catch (error) {
     console.error('❌ Error:', error);
-    res.status(500).json({
+    res.status(400).json({
       success: false,
       message: 'Gagal update status',
       error: error.message
@@ -593,7 +811,7 @@ exports.toggleReminder = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error:', error);
-    res.status(500).json({
+    res.status(400).json({
       success: false,
       message: 'Gagal toggle reminder',
       error: error.message
@@ -602,7 +820,7 @@ exports.toggleReminder = async (req, res) => {
 };
 
 /**
- * ✅ Send WhatsApp reminder manually
+ * ✅ Send WhatsApp reminder manually (support both private & group)
  */
 exports.sendWhatsAppReminder = async (req, res) => {
   try {
@@ -627,39 +845,65 @@ exports.sendWhatsAppReminder = async (req, res) => {
       });
     }
 
-    const coachPhone = schedule.coachId?.phone || schedule.coachPhone;
-    const coachName = schedule.coachId?.fullName || schedule.coachName;
+    let recipients = [];
+    let message = '';
 
-    if (!coachPhone) {
-      return res.status(400).json({
-        success: false,
-        message: 'Nomor HP coach tidak tersedia'
-      });
+    if (schedule.scheduleType === 'private') {
+      const coachPhone = schedule.coachId?.phone || schedule.coachPhone;
+      const coachName = schedule.coachId?.fullName || schedule.coachName;
+
+      if (!coachPhone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Nomor HP coach tidak tersedia'
+        });
+      }
+
+      recipients = [
+        {
+          name: coachName,
+          phone: coachPhone,
+          type: 'coach'
+        }
+      ];
+
+      message = formatPrivateReminderMessage(schedule.toObject());
+    } else {
+      // ✅ GROUP: Send ke semua coaches
+      recipients = schedule.coaches.map(c => ({
+        name: c.fullName,
+        phone: c.phone,
+        type: 'coach'
+      }));
+
+      if (recipients.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tidak ada coach yang tersedia'
+        });
+      }
+
+      message = formatGroupReminderMessage(schedule.toObject());
     }
 
-    const scheduleObj = {
-      ...schedule.toObject(),
-      coachName,
-      coachPhone,
-      studentName: schedule.studentId?.fullName || schedule.studentName,
-      studentPhone: schedule.studentId?.phone || schedule.studentPhone
-    };
+    // ✅ Send messages
+    const results = await sendMultipleMessages(recipients, message, 'Reminders');
 
-    const message = formatReminderMessage(scheduleObj);
-    await whatsappService.sendMessage(coachPhone, message);
-
+    // ✅ Update reminder tracking
     schedule.reminderSent = true;
     schedule.reminderSentAt = new Date();
+    schedule.reminderAttempts = (schedule.reminderAttempts || 0) + 1;
+    schedule.reminderLastAttempt = new Date();
     await schedule.save();
 
-    console.log(`✅ Reminder sent to ${coachPhone}`);
+    console.log(`✅ Reminders sent to ${results.success.length} recipients`);
 
     res.json({
       success: true,
-      message: `Pengingat WhatsApp berhasil dikirim ke Coach ${coachName}!`,
+      message: `Pengingat WhatsApp berhasil dikirim ke ${results.success.length} penerima!`,
       data: {
-        recipient: coachPhone,
-        recipientName: coachName,
+        sent: results.success,
+        failed: results.failed,
         sentAt: new Date()
       }
     });
@@ -674,23 +918,32 @@ exports.sendWhatsAppReminder = async (req, res) => {
 };
 
 /**
- * ✅ Check schedule conflicts
+ * ✅ Check schedule conflicts (support both private & group)
  */
 exports.checkConflicts = async (req, res) => {
   try {
-    const { coachId, date, startTime, endTime, scheduleId } = req.body;
+    const {
+      date,
+      startTime,
+      endTime,
+      scheduleType,
+      coachId,
+      coachIds,
+      studentId,
+      studentIds,
+      scheduleId
+    } = req.body;
 
     console.log('⚠️ POST /schedules/check-conflicts');
-    console.log('   Coach:', coachId, 'Date:', date);
+    console.log('   Type:', scheduleType, 'Date:', date);
 
-    if (!coachId || !date || !startTime || !endTime) {
+    if (!date || !startTime || !endTime || !scheduleType) {
       return res.status(400).json({
         success: false,
-        message: 'coachId, date, startTime, and endTime are required'
+        message: 'date, startTime, endTime, dan scheduleType are required'
       });
     }
 
-    // ✅ Normalize date
     const queryDate = normalizeDate(date);
 
     if (!queryDate) {
@@ -700,39 +953,40 @@ exports.checkConflicts = async (req, res) => {
       });
     }
 
-    const query = {
-      coachId,
+    const conflictData = {
       date: queryDate,
-      status: { $ne: 'cancelled' },
-      $or: [
-        {
-          $and: [
-            { startTime: { $lte: startTime } },
-            { endTime: { $gt: startTime } }
-          ]
-        },
-        {
-          $and: [
-            { startTime: { $lt: endTime } },
-            { endTime: { $gte: endTime } }
-          ]
-        },
-        {
-          $and: [
-            { startTime: { $gte: startTime } },
-            { endTime: { $lte: endTime } }
-          ]
-        }
-      ]
+      startTime,
+      endTime,
+      scheduleType,
+      excludeId: scheduleId
     };
 
-    if (scheduleId) {
-      query._id = { $ne: scheduleId };
+    if (scheduleType === 'private') {
+      if (!coachId || !studentId) {
+        return res.status(400).json({
+          success: false,
+          message: 'coachId dan studentId required untuk private schedule'
+        });
+      }
+      conflictData.coachId = coachId;
+      conflictData.studentId = studentId;
+    } else {
+      if (
+        !coachIds ||
+        !studentIds ||
+        coachIds.length === 0 ||
+        studentIds.length === 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'coachIds dan studentIds diperlukan untuk group schedule'
+        });
+      }
+      conflictData.coaches = coachIds;
+      conflictData.students = studentIds;
     }
 
-    const conflicts = await Schedule.find(query)
-      .populate('studentId', 'fullName')
-      .populate('coachId', 'fullName');
+    const conflicts = await Schedule.checkConflicts(conflictData);
 
     console.log(`✅ Found ${conflicts.length} conflicts`);
 
@@ -747,6 +1001,58 @@ exports.checkConflicts = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * ✅ Get archive statistics
+ */
+exports.getArchiveStats = async (req, res) => {
+  try {
+    console.log('📊 GET /schedules/stats/archive');
+
+    const stats = await Schedule.getArchiveStats();
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mengambil statistik archive',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * ✅ Get schedules statistics
+ */
+exports.getStatistics = async (req, res) => {
+  try {
+    console.log('📊 GET /schedules/stats');
+
+    const byStatus = await Schedule.getStatsByStatus();
+    const byType = await Schedule.getStatsByType();
+    const archiveStats = await Schedule.getArchiveStats();
+
+    res.json({
+      success: true,
+      data: {
+        byStatus,
+        byType,
+        archive: archiveStats
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mengambil statistik',
       error: error.message
     });
   }

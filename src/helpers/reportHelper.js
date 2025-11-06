@@ -1,5 +1,7 @@
-// helpers/reportHelper.js
 
+
+
+const mongoose = require('mongoose');
 const Schedule = require('../models/Schedule');
 const Coach = require('../models/Coach');
 const Student = require('../models/Student');
@@ -8,17 +10,23 @@ const Payment = require('../models/Payment');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 
-// ==================== DATA EXPORT HELPERS ====================
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ HELPER 1: GET STUDENT EXPORT DATA
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ✅ Get student export data
+ */
 async function getStudentExportData(studentId, startDate, endDate) {
   try {
+    console.log('📊 Get student export data:', studentId);
+
     const student = await Student.findOne({
       $or: [{ _id: studentId }, { studentId: studentId }]
     }).lean();
 
-    if (!student) {
-      throw new Error('Student not found');
-    }
+    if (!student) throw new Error('Siswa tidak ditemukan');
 
     const evalFilter = { studentId: student._id };
     if (startDate && endDate) {
@@ -29,33 +37,61 @@ async function getStudentExportData(studentId, startDate, endDate) {
     }
 
     const evaluations = await TrainingEvaluation.find(evalFilter)
-      .populate('coachId', 'fullName specialization')
-      .populate('scheduleId')
+      .populate('coachIds', '_id coachId fullName specialization')
+      .populate('scheduleId', 'startTime endTime location program scheduleType programCategory')
       .sort({ trainingDate: -1 })
       .lean();
 
-    const history = evaluations.map(evaluation => {
-      const schedule = evaluation.scheduleId;
-      return {
-        date: evaluation.trainingDate,
-        time: schedule ? `${schedule.startTime} - ${schedule.endTime}` : '-',
-        location: schedule?.location || '-',
-        program: schedule?.program || '-',
-        coachName: evaluation.coachId?.fullName || '-',
-        attendance: evaluation.attendance || 'Tidak Hadir',
-        notes: evaluation.notes || '-'
-      };
-    });
+    console.log(`✅ Found ${evaluations.length} evaluations`);
+
+    // Format history
+    const history = evaluations.map(ev => ({
+      date: ev.trainingDate,
+      time: ev.scheduleId ? `${ev.scheduleId.startTime} - ${ev.scheduleId.endTime}` : '-',
+      location: ev.scheduleId?.location || '-',
+      program: ev.scheduleId?.program || '-',
+      scheduleType: ev.scheduleId?.scheduleType || '-',
+      programCategory: ev.scheduleId?.programCategory || '-',
+      coachNames: (ev.coachIds || []).map(c => c.fullName).join(', ') || '-',
+      attendance: ev.attendance || 'Tidak Hadir',
+      notes: ev.notes || '-'
+    }));
 
     return { student, history };
   } catch (error) {
-    console.error('Error in getStudentExportData:', error);
+    console.error('❌ Error getStudentExportData:', error);
     throw error;
   }
 }
 
-async function getCoachExportData(startDate, endDate, coachId = null) {
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ HELPER 2: GET COACH EXPORT DATA - FIXED VERSION
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ✅ Get coach export data - FIXED
+ * 
+ * SISTEM:
+ * - Coach role: OTOMATIS filter diri sendiri (coachId dari Coach collection)
+ * - Admin role: Bisa lihat semua atau filter specific coach
+ * - Hanya ambil coach PERTAMA dari GROUP
+ * - coachId HANYA dari Coach collection (bukan evaluation)
+ */
+// backend/src/helpers/reportHelper.js - COMPLETE FIX
+
+/**
+ * ✅ Get coach export data
+ * FIXED: Ambil coach data dari Coaches collection (bukan dari populate Schedule)
+ */
+async function getCoachExportData(startDate, endDate, coachId = null, userRole = 'admin', userCoachId = null) {
   try {
+    console.log('\n' + '='.repeat(100));
+    console.log('📊 Get coach export data - FIXED: Ambil dari Coaches collection');
+    console.log('='.repeat(100));
+    console.log('   User:', { role: userRole, coachId: userCoachId });
+    console.log('   Params:', { startDate, endDate, coachId });
+
     const scheduleFilter = {};
     
     if (startDate && endDate) {
@@ -65,112 +101,291 @@ async function getCoachExportData(startDate, endDate, coachId = null) {
       };
     }
 
-    if (coachId) {
-      const coach = await Coach.findOne({ _id: coachId }).lean();
-      if (coach) {
-        scheduleFilter.coachId = coach._id;
-        console.log(`🔍 Export filtering for coach: ${coach.fullName}`);
+    // ==================== PERMISSION ====================
+    let filterCoachId = coachId;
+
+    if (userRole === 'coach') {
+      if (coachId && coachId !== userCoachId) {
+        throw new Error('Anda hanya bisa export laporan Anda sendiri');
+      }
+      filterCoachId = userCoachId;
+      console.log(`   🔒 AUTO-FILTER: Coach ${filterCoachId}`);
+    }
+
+    let coachObjectId = null;
+    if (filterCoachId) {
+      if (filterCoachId.match(/^[0-9a-fA-F]{24}$/)) {
+        coachObjectId = new mongoose.Types.ObjectId(filterCoachId);
       }
     }
 
-    const sessions = await Schedule.find(scheduleFilter)
-      .populate('coachId', 'coachId fullName specialization')
-      .populate('studentId', 'studentId fullName')
+    if (!coachObjectId && filterCoachId) {
+      throw new Error('Coach tidak ditemukan');
+    }
+
+    // ==================== FETCH SCHEDULES ====================
+    console.log('\n📅 Fetching schedules...');
+
+    const scheduleFilter2 = { ...scheduleFilter };
+    
+    if (coachObjectId) {
+      scheduleFilter2.$or = [
+        { coachId: coachObjectId, scheduleType: 'private' },
+        { 'coaches._id': coachObjectId, scheduleType: 'group' }
+      ];
+    }
+
+    const schedules = await Schedule.find(scheduleFilter2)
+      .populate('coachId', '_id coachId fullName')
+      .populate('studentId', '_id studentId fullName classLevel')
+      .populate('students', '_id studentId fullName classLevel')
+      .populate('coaches', '_id coachId fullName')
       .lean()
       .sort({ date: -1 })
       .limit(1000)
       .exec();
 
-    const scheduleIds = sessions.map(s => s._id);
-    
-    const evaluations = await TrainingEvaluation
-      .find({ scheduleId: { $in: scheduleIds } })
-      .populate('studentId', 'studentId fullName classLevel')
-      .lean()
-      .exec();
+    console.log(`✅ Found ${schedules.length} schedules`);
 
-    const evaluationMap = {};
-    evaluations.forEach(evaluation => {
-      const scheduleId = evaluation.scheduleId.toString();
-      if (!evaluationMap[scheduleId]) {
-        evaluationMap[scheduleId] = [];
+    if (schedules.length === 0) {
+      return { coaches: [] };
+    }
+
+    // ==================== NORMALIZE SCHEDULES ====================
+    console.log('\n📊 Normalizing schedules...');
+
+    const normalizedSchedules = schedules.map((schedule) => {
+      let students = [];
+      let mainCoachId = null;
+
+      if (schedule.scheduleType === 'private') {
+        if (Array.isArray(schedule.students) && schedule.students.length > 0) {
+          students = schedule.students.map(s => ({
+            _id: s._id.toString(),
+            studentId: s.studentId,
+            fullName: s.fullName,
+          }));
+        } else if (schedule.studentId) {
+          students = [{
+            _id: schedule.studentId._id.toString(),
+            studentId: schedule.studentId.studentId,
+            fullName: schedule.studentId.fullName,
+          }];
+        }
+        
+        // ✅ PRIVATE: Ambil coachId dari schedule.coachId
+        if (schedule.coachId) {
+          mainCoachId = schedule.coachId._id.toString();
+        }
       }
-      evaluationMap[scheduleId].push({
-        studentName: evaluation.studentId?.fullName || 'Unknown',
-        studentId: evaluation.studentId?.studentId || '-',
-        attendance: evaluation.attendance || 'Tidak Hadir',
-        notes: evaluation.notes || '-'
+      else if (schedule.scheduleType === 'group') {
+        students = (schedule.students || []).map(s => ({
+          _id: s._id.toString(),
+          studentId: s.studentId,
+          fullName: s.fullName,
+        }));
+
+        // ✅ GROUP: Cari coach yang match dengan userCoachId
+        if (Array.isArray(schedule.coaches) && schedule.coaches.length > 0) {
+          if (userCoachId) {
+            const userCoachObjectId = new mongoose.Types.ObjectId(userCoachId);
+            const matchedCoach = schedule.coaches.find(c => {
+              const cId = c._id?.toString?.() || c._id.toString();
+              return cId === userCoachObjectId.toString();
+            });
+            
+            if (matchedCoach) {
+              mainCoachId = matchedCoach._id.toString();
+              console.log(`   📌 GROUP: Matched coach - ${mainCoachId}`);
+            } else {
+              mainCoachId = schedule.coaches[0]._id.toString();
+            }
+          } else {
+            mainCoachId = schedule.coaches[0]._id.toString();
+          }
+        }
+      }
+
+      return {
+        ...schedule,
+        students,
+        mainCoachId
+      };
+    });
+
+    console.log(`✅ Normalized`);
+
+    // ==================== GET COACH DATA FROM COACHES COLLECTION ====================
+    console.log('\n👥 Fetching coach data from Coaches collection...');
+
+    const coachIds = new Set(normalizedSchedules
+      .filter(s => s.mainCoachId)
+      .map(s => new mongoose.Types.ObjectId(s.mainCoachId)));
+
+    const coachesFromDB = await Coach.find({ _id: { $in: Array.from(coachIds) } })
+      .select('_id coachId fullName')
+      .lean();
+
+    const coachDataMap = new Map();
+    coachesFromDB.forEach(coach => {
+      coachDataMap.set(coach._id.toString(), {
+        _id: coach._id.toString(),
+        coachId: coach.coachId,
+        fullName: coach.fullName
       });
     });
 
+    console.log(`✅ Found ${coachesFromDB.length} coaches`);
+
+    // ==================== GET EVALUATIONS ====================
+    console.log('\n📋 Fetching evaluations...');
+
+    const scheduleIds = normalizedSchedules.map(s => s._id);
+    
+    const evaluations = await TrainingEvaluation
+      .find({ scheduleId: { $in: scheduleIds } })
+      .populate('studentId', '_id studentId fullName classLevel')
+      .populate('coachIds', '_id coachId fullName')
+      .lean()
+      .exec();
+
+    console.log(`✅ Found ${evaluations.length} evaluations`);
+
+    // ==================== BUILD EVALUATION MAP ====================
+    const evaluationMap = {};
+    evaluations.forEach(ev => {
+      const scheduleId = ev.scheduleId.toString();
+      if (!evaluationMap[scheduleId]) evaluationMap[scheduleId] = [];
+      
+      const coachNames = (ev.coachIds || []).map(c => c.fullName).join(', ');
+      
+      evaluationMap[scheduleId].push({
+        studentName: ev.studentId?.fullName || 'Unknown',
+        studentId: ev.studentId?.studentId || '-',
+        attendance: ev.attendance || 'Tidak Hadir',
+        notes: ev.notes || '-',
+        coachNames: coachNames
+      });
+    });
+
+    // ==================== BUILD COACH MAP ====================
+    console.log('\n👥 Building coach map...');
+
     const coachMap = {};
     
-    sessions.forEach(session => {
-      const coachObjectId = session.coachId?._id?.toString();
-      if (!coachObjectId) return;
+    normalizedSchedules.forEach(schedule => {
+      if (!schedule.mainCoachId) return;
 
-      if (!coachMap[coachObjectId]) {
-        coachMap[coachObjectId] = {
-          coachName: session.coachId.fullName,
-          coachId: session.coachId.coachId,
-          specialization: session.coachId.specialization || '-',
-          programStats: {},
-          sessions: []
-        };
+      const coachDataFromDB = coachDataMap.get(schedule.mainCoachId);
+      if (!coachDataFromDB) {
+        console.warn(`⚠️ Coach data not found: ${schedule.mainCoachId}`);
+        return;
       }
 
-      const program = session.program || 'Unknown';
-      if (!coachMap[coachObjectId].programStats[program]) {
-        coachMap[coachObjectId].programStats[program] = {
-          count: 0,
+      const coachKey = schedule.mainCoachId;
+
+      if (!coachMap[coachKey]) {
+        coachMap[coachKey] = {
+          _id: coachDataFromDB._id,
+          coachId: coachDataFromDB.coachId,
+          name: coachDataFromDB.fullName,
+          totalSessions: 0,
+          scheduleTypeStats: {},
+          sessions: []
+        };
+
+        console.log(`   ✅ Coach added: ${coachDataFromDB.fullName} (${coachDataFromDB.coachId})`);
+      }
+
+      coachMap[coachKey].totalSessions++;
+
+      const scheduleType = schedule.scheduleType || 'Unknown';
+      const programCategory = schedule.programCategory || 'General';
+      const typeKey = `${scheduleType} (${programCategory})`;
+      
+      if (!coachMap[coachKey].scheduleTypeStats[typeKey]) {
+        coachMap[coachKey].scheduleTypeStats[typeKey] = {
+          scheduleType,
+          programCategory,
+          total: 0,
           completed: 0,
           cancelled: 0
         };
       }
       
-      coachMap[coachObjectId].programStats[program].count++;
+      coachMap[coachKey].scheduleTypeStats[typeKey].total++;
       
-      if (session.status === 'completed') {
-        coachMap[coachObjectId].programStats[program].completed++;
-      } else if (session.status === 'cancelled') {
-        coachMap[coachObjectId].programStats[program].cancelled++;
+      if (schedule.status === 'completed') {
+        coachMap[coachKey].scheduleTypeStats[typeKey].completed++;
+      } else if (schedule.status === 'cancelled') {
+        coachMap[coachKey].scheduleTypeStats[typeKey].cancelled++;
       }
 
-      const sessionEvaluations = evaluationMap[session._id.toString()] || [];
+      const sessionEvaluations = evaluationMap[schedule._id.toString()] || [];
+      const students = schedule.students || [];
 
-      coachMap[coachObjectId].sessions.push({
-        date: session.date,
-        time: `${session.startTime} - ${session.endTime}`,
-        location: session.location || '-',
-        level: session.program || '-',
-        status: session.status ? session.status.charAt(0).toUpperCase() + session.status.slice(1) : 'Unknown',
-        studentCount: sessionEvaluations.length || (session.studentId ? 1 : 0),
-        students: session.studentId?.fullName || '-',
-        scheduleNotes: session.notes || '-',
+      coachMap[coachKey].sessions.push({
+        scheduleId: schedule._id.toString(),
+        date: schedule.date,
+        time: `${schedule.startTime} - ${schedule.endTime}`,
+        location: schedule.location || '-',
+        program: schedule.program || '-',
+        scheduleType: schedule.scheduleType || '-',
+        programCategory: schedule.programCategory || '-',
+        groupName: schedule.groupName || '',
+        status: schedule.status?.charAt(0).toUpperCase() + schedule.status?.slice(1) || 'Unknown',
+        studentCount: students.length,
+        studentNames: students.map(s => s.fullName),
+        students: students.map(s => s.fullName).join(', '),
         evaluations: sessionEvaluations
       });
     });
 
-    return { 
-      coaches: Object.values(coachMap).map(coach => ({
-        ...coach,
-        totalSessions: coach.sessions.length,
-        programStats: Object.keys(coach.programStats).map(program => ({
-          program,
-          totalSessions: coach.programStats[program].count,
-          completedSessions: coach.programStats[program].completed,
-          cancelledSessions: coach.programStats[program].cancelled
-        })).sort((a, b) => b.totalSessions - a.totalSessions)
-      }))
-    };
+    console.log(`✅ ${Object.keys(coachMap).length} unique coaches processed`);
+
+    // ==================== FORMAT RESPONSE ====================
+    const coaches = Object.values(coachMap).map(coach => ({
+      name: coach.name,
+      id: coach.coachId,
+      totalSessions: coach.totalSessions,
+      scheduleTypeStats: Object.keys(coach.scheduleTypeStats)
+        .map(typeKey => ({
+          ...coach.scheduleTypeStats[typeKey],
+          typeKey: typeKey
+        }))
+        .sort((a, b) => b.total - a.total),
+      sessions: coach.sessions
+    }));
+
+    console.log('\n' + '='.repeat(100));
+    console.log('✅ Coach export data COMPLETE');
+    coaches.forEach(c => {
+      console.log(`   Coach: ${c.name} (${c.id}) - Sessions: ${c.totalSessions}`);
+    });
+    console.log('='.repeat(100) + '\n');
+
+    return { coaches };
   } catch (error) {
-    console.error('Error in getCoachExportData:', error);
+    console.error('❌ Error getCoachExportData:', error);
     throw error;
   }
 }
 
+
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ HELPER 3: GET FINANCIAL EXPORT DATA
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ✅ Get financial export data
+ */
 async function getFinancialExportData(startDate, endDate) {
   try {
+    console.log('💰 Getting financial export data');
+
     const paymentFilter = {};
     if (startDate && endDate) {
       paymentFilter.paymentDate = {
@@ -187,44 +402,40 @@ async function getFinancialExportData(startDate, endDate) {
       .exec();
 
     const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
-    
+
     const stats = {
       totalPayments: payments.length,
-      totalRevenue,
       paidCount: payments.filter(p => p.status === 'paid').length,
       pendingCount: payments.filter(p => p.status === 'pending').length,
       averagePayment: payments.length > 0 ? Math.round(totalRevenue / payments.length) : 0
     };
 
-    return { 
+    return {
       payments: payments.map(p => ({
         date: p.paymentDate,
-        studentName: p.studentName || p.studentId?.fullName || 'Unknown',
-        studentId: p.studentId?.studentId || '-',
+        student: p.studentName || p.studentId?.fullName || 'Unknown',
         month: p.month || '-',
         amount: p.amount || 0,
         method: p.method || '-',
-        status: p.status || 'unknown',
-        notes: p.notes || '-'
+        status: p.status || 'unknown'
       })),
       totalRevenue,
       stats
     };
   } catch (error) {
-    console.error('Error in getFinancialExportData:', error);
+    console.error('❌ Error getFinancialExportData:', error);
     throw error;
   }
 }
 
-// ==================== PDF EXPORT ====================
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ PDF EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
 async function exportToPDFBeautiful(res, title, data, reportType, startDate, endDate) {
   try {
-    const doc = new PDFDocument({ 
-      margin: 50,
-      size: 'A4',
-      bufferPages: true
-    });
+    const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=laporan-${reportType}-${Date.now()}.pdf`);
@@ -232,498 +443,361 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
     doc.pipe(res);
 
     // Header
-    doc.rect(0, 0, doc.page.width, 110).fill('#0ea5e9');
+    doc.rect(0, 0, doc.page.width, 100).fill('#0ea5e9');
+    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold')
+       .text('LAFI SWIMMING ACADEMY', 50, 20, { align: 'center' });
+    doc.fontSize(14).text(title, 50, 45, { align: 'center' });
+    doc.fontSize(9).font('Helvetica')
+       .text(`Periode: ${startDate || 'Semua'} s/d ${endDate || 'Semua'}`, 50, 65, { align: 'center' });
+    doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, 50, 78, { align: 'center' });
 
-    doc.fillColor('#ffffff')
-       .fontSize(22)
-       .font('Helvetica-Bold')
-       .text('LAFI SWIMMING ACADEMY', 50, 25, { align: 'center' });
+    doc.moveDown(2).fillColor('#000000');
 
-    doc.fontSize(16)
-       .text(title, 50, 52, { align: 'center' });
-
-    doc.fontSize(9)
-       .font('Helvetica')
-       .text(`Periode: ${startDate || 'Semua'} s/d ${endDate || 'Semua'}`, 50, 75, { align: 'center' });
-
-    doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })}`, 50, 90, { align: 'center' });
-
-    doc.moveDown(2);
-    doc.fillColor('#000000');
-
-    if (reportType === 'student-individual' && data.student) {
-      await renderStudentIndividualPDF(doc, data);
-    } else if (reportType === 'coach' && data.coaches) {
+    if (reportType === 'student-individual') {
+      await renderStudentPDF(doc, data);
+    } else if (reportType === 'coach') {
       await renderCoachPDF(doc, data.coaches);
-    } else if (reportType === 'financial' && data.payments) {
-      await renderFinancialPDF(doc, data.payments, data.totalRevenue, data.stats);
+    } else if (reportType === 'financial') {
+      await renderFinancialPDF(doc, data);
     }
 
     // Footer
     const pages = doc.bufferedPageRange();
     for (let i = 0; i < pages.count; i++) {
       doc.switchToPage(i);
-
       doc.moveTo(50, doc.page.height - 45)
-         .lineTo(doc.page.width - 50, doc.page.height - 45)
-         .stroke('#e5e7eb');
-
-      doc.fontSize(8)
-         .fillColor('#6b7280')
-         .text(
-           `Halaman ${i + 1} dari ${pages.count}`,
-           50,
-           doc.page.height - 35,
-           { align: 'center', width: doc.page.width - 100 }
-         );
-
-      doc.fontSize(7)
-         .text('Lafi Swimming Academy - Sistem Manajemen Akademi Renang', 50, doc.page.height - 25, {
-           align: 'center',
-           width: doc.page.width - 100
-         });
+        .lineTo(doc.page.width - 50, doc.page.height - 45)
+        .stroke('#e5e7eb');
+      doc.fontSize(8).fillColor('#6b7280')
+        .text(`Halaman ${i + 1} dari ${pages.count}`, 50, doc.page.height - 35, { 
+          align: 'center', 
+          width: doc.page.width - 100 
+        });
     }
 
     doc.end();
   } catch (error) {
-    console.error('Error generating PDF:', error);
+    console.error('❌ Error PDF:', error);
     if (!res.headersSent) {
-      res.status(500).json({ 
-        success: false, 
-        message: 'Error generating PDF report',
-        error: error.message 
-      });
+      res.status(500).json({ success: false, message: 'Error generating PDF' });
     }
   }
 }
 
-// ==================== STUDENT INDIVIDUAL PDF ====================
 
-async function renderStudentIndividualPDF(doc, data) {
-  let y = 145;
-  const PAGE_BOTTOM_MARGIN = 75;
+// ==================== PDF RENDER: STUDENT ====================
+async function renderStudentPDF(doc, data) {
+  let y = 125;
 
-  // Student info
-  doc.roundedRect(50, y, doc.page.width - 100, 75, 5)
-     .fillAndStroke('#f0f9ff', '#0ea5e9');
+  doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
+    .fillAndStroke('#f0f9ff', '#0ea5e9');
+  doc.fillColor('#0ea5e9').fontSize(12).font('Helvetica-Bold')
+    .text(`SISWA: ${data.student.fullName}`, 70, y + 10);
+  doc.fontSize(9).fillColor('#1e293b').font('Helvetica')
+    .text(`ID: ${data.student.studentId}`, 70, y + 28)
+    .text(`Total Sesi: ${data.history.length}`, 70, y + 56);
 
-  doc.fillColor('#0ea5e9')
-     .fontSize(13)
-     .font('Helvetica-Bold')
-     .text(`Siswa: ${data.student.fullName}`, 70, y + 12);
+  y += 75;
 
-  doc.fontSize(9)
-     .fillColor('#1e293b')
-     .font('Helvetica')
-     .text(`ID: ${data.student.studentId}`, 70, y + 30)
-     .text(`Level: ${data.student.classLevel}`, 70, y + 43)
-     .text(`Status: ${data.student.status}`, 70, y + 56)
-     .text(`Total Sesi: ${data.history.length}`, 300, y + 43);
+  doc.rect(50, y, doc.page.width - 100, 16).fill('#0ea5e9');
+  doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+    .text('Tanggal', 60, y + 4, { width: 40 })
+    .text('Waktu', 105, y + 4, { width: 35 })
+    .text('Tipe', 145, y + 4, { width: 30 })
+    .text('Kategori', 180, y + 4, { width: 35 })
+    .text('Program', 220, y + 4, { width: 40 })
+    .text('Pelatih', 265, y + 4, { width: 60 })
+    .text('Kehadiran', 330, y + 4, { width: 35 })
+    .text('Catatan', 370, y + 4, { width: 125 });
 
-  y += 85;
+  y += 18;
 
-  // Table header
-  const renderTableHeader = (startY) => {
-    doc.rect(50, startY, doc.page.width - 100, 18).fill('#0ea5e9');
-
-    doc.fillColor('#ffffff')
-       .fontSize(6.5)
-       .font('Helvetica-Bold')
-       .text('Tanggal', 60, startY + 5, { width: 58 })
-       .text('Waktu', 123, startY + 5, { width: 43 })
-       .text('Lokasi', 171, startY + 5, { width: 48 })
-       .text('Pelatih', 224, startY + 5, { width: 63 })
-       .text('Hadir', 292, startY + 5, { width: 48 })
-       .text('Evaluasi', 345, startY + 5, { width: 190 });
-
-    return startY + 20;
-  };
-
-  y = renderTableHeader(y);
-
-  // Table rows
   data.history.forEach((item, i) => {
-    const evalText = item.notes || '-';
-    const evalWidth = 190;
-    const fontSize = 6.5;
-    const avgCharWidth = fontSize * 0.52;
-    const charsPerLine = Math.floor(evalWidth / avgCharWidth);
-    const lines = Math.ceil(evalText.length / charsPerLine);
-    const lineHeight = 8.5;
-    const textHeight = lines * lineHeight;
-    const rowHeight = Math.max(16, textHeight + 4);
-
-    if (y + rowHeight > doc.page.height - PAGE_BOTTOM_MARGIN) {
+    if (y > doc.page.height - 100) {
       doc.addPage();
       y = 50;
-      y = renderTableHeader(y);
     }
 
     const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
-    doc.rect(50, y, doc.page.width - 100, rowHeight).fill(bgColor);
+    doc.rect(50, y, doc.page.width - 100, 14).fill(bgColor);
 
-    doc.strokeColor('#e5e7eb').lineWidth(0.3)
-       .moveTo(123, y).lineTo(123, y + rowHeight)
-       .moveTo(171, y).lineTo(171, y + rowHeight)
-       .moveTo(224, y).lineTo(224, y + rowHeight)
-       .moveTo(292, y).lineTo(292, y + rowHeight)
-       .moveTo(345, y).lineTo(345, y + rowHeight)
-       .stroke();
+    doc.fillColor('#000').fontSize(5.5).font('Helvetica')
+      .text(new Date(item.date).toLocaleDateString('id-ID'), 60, y + 2, { width: 40 })
+      .text(item.time, 105, y + 2, { width: 35 })
+      .text(item.scheduleType || '-', 145, y + 2, { width: 30 })
+      .text(item.programCategory, 180, y + 2, { width: 35 })
+      .text(item.program, 220, y + 2, { width: 40 })
+      .text(item.coachNames, 265, y + 2, { width: 60 })
+      .text(item.attendance, 330, y + 2, { width: 35 })
+      .text(item.notes, 370, y + 2, { width: 125 });
 
-    const dateStr = item.date ? new Date(item.date).toLocaleDateString('id-ID') : '-';
-    const centerY = rowHeight > 22 ? 4 : Math.max(4, (rowHeight - 9) / 2);
-
-    doc.fillColor('#000000')
-       .fontSize(6.5)
-       .font('Helvetica');
-
-    doc.text(dateStr, 60, y + centerY, { width: 58, ellipsis: true });
-    doc.text(item.time, 123, y + centerY, { width: 43 });
-    doc.text(item.location, 171, y + centerY, { width: 48, ellipsis: true });
-    doc.text(item.coachName, 224, y + centerY, { width: 63, ellipsis: true });
-    doc.text(item.attendance, 292, y + centerY, { width: 48 });
-
-    doc.text(evalText, 345, y + 3, { 
-      width: evalWidth,
-      align: 'left',
-      lineGap: 0
-    });
-
-    y += rowHeight;
+    y += 14;
   });
-
-  if (data.history.length === 0) {
-    doc.fontSize(9)
-       .fillColor('#6b7280')
-       .text('Belum ada riwayat latihan', 50, y + 12, { 
-         align: 'center', 
-         width: doc.page.width - 100 
-       });
-  }
 }
 
-// ==================== COACH PDF ====================
 
+// ==================== PDF RENDER: COACH ====================
 async function renderCoachPDF(doc, coaches) {
-  let y = 145;
-  const PAGE_BOTTOM_MARGIN = 75;
+  let y = 125;
 
-  coaches.forEach((coach) => {
-    if (y > doc.page.height - 220) {
+  coaches.forEach(coach => {
+    if (y > doc.page.height - 150) {
       doc.addPage();
       y = 50;
     }
 
-    // Coach header
-    doc.roundedRect(50, y, doc.page.width - 100, 42, 5)
-       .fillAndStroke('#f0fdf4', '#10b981');
-
-    doc.fillColor('#10b981')
-       .fontSize(10.5)
-       .font('Helvetica-Bold')
-       .text(`${coach.coachName} (${coach.coachId})`, 70, y + 7);
-
-    doc.fontSize(7.5)
-       .fillColor('#6b7280')
-       .font('Helvetica')
-       .text(`Spesialisasi: ${coach.specialization}`, 70, y + 22)
-       .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 22);
+    // Coach Header
+    doc.roundedRect(50, y, doc.page.width - 100, 40, 5)
+      .fillAndStroke('#f0fdf4', '#10b981');
+    doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold')
+      .text(`${coach.name} (${coach.id})`, 70, y + 8);
+    doc.fontSize(8).fillColor('#6b7280').font('Helvetica')
+      .text(`Spesialisasi: ${coach.specialization}`, 70, y + 25)
+      .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 25);
 
     y += 50;
 
-    // Program stats
-    if (coach.programStats && coach.programStats.length > 0) {
-      doc.fontSize(8.5)
-         .fillColor('#10b981')
-         .font('Helvetica-Bold')
-         .text('Statistik Program:', 60, y);
-      
-      y += 14;
+    // Schedule Type Stats
+    if (coach.scheduleTypeStats.length > 0) {
+      doc.fontSize(8).fillColor('#10b981').font('Helvetica-Bold')
+        .text('📂 Statistik Schedule Type:', 60, y);
+      y += 12;
 
-      doc.rect(50, y, doc.page.width - 100, 16).fill('#10b981');
-      
-      doc.fillColor('#ffffff')
-         .fontSize(6.5)
-         .font('Helvetica-Bold')
-         .text('Program', 70, y + 4, { width: 170 })
-         .text('Total', 250, y + 4, { width: 55 })
-         .text('Selesai', 315, y + 4, { width: 55 })
-         .text('Batal', 380, y + 4, { width: 55 });
+      doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981');
+      doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+        .text('Schedule Type (Kategori)', 60, y + 3, { width: 200 })
+        .text('Total', 265, y + 3, { width: 35 })
+        .text('Selesai', 305, y + 3, { width: 35 })
+        .text('Batal', 345, y + 3, { width: 35 });
 
-      y += 18;
+      y += 16;
 
-      coach.programStats.forEach((stat, i) => {
+      coach.scheduleTypeStats.forEach((stat, i) => {
         const bgColor = i % 2 === 0 ? '#f0fdf4' : '#ffffff';
-        doc.rect(50, y, doc.page.width - 100, 14).fill(bgColor);
+        doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
 
-        doc.fillColor('#000000')
-           .fontSize(6.5)
-           .font('Helvetica')
-           .text(stat.program, 70, y + 3.5, { width: 170 })
-           .text(stat.totalSessions.toString(), 250, y + 3.5, { width: 55 })
-           .text(stat.completedSessions.toString(), 315, y + 3.5, { width: 55 })
-           .text((stat.cancelledSessions || 0).toString(), 380, y + 3.5, { width: 55 });
+        doc.fillColor('#000').fontSize(5.5).font('Helvetica')
+          .text(stat.typeKey, 60, y + 2, { width: 200 })
+          .text(stat.total.toString(), 265, y + 2, { width: 35 })
+          .text(stat.completed.toString(), 305, y + 2, { width: 35 })
+          .text(stat.cancelled.toString(), 345, y + 2, { width: 35 });
 
-        y += 14;
+        y += 12;
       });
 
       y += 8;
     }
 
     // Sessions
-    coach.sessions.forEach((session, sessionIndex) => {
-      if (y > doc.page.height - PAGE_BOTTOM_MARGIN) {
-        doc.addPage();
-        y = 50;
-      }
+    if (coach.sessions.length > 0) {
+      doc.fontSize(8).fillColor('#0369a1').font('Helvetica-Bold')
+        .text('📋 Daftar Sesi & Evaluasi Siswa:', 60, y);
+      y += 12;
 
-      doc.rect(50, y, doc.page.width - 100, 18).fill('#e0f2fe');
-      
-      const sessionDate = session.date ? new Date(session.date).toLocaleDateString('id-ID') : '-';
-      
-      doc.fillColor('#0369a1')
-         .fontSize(7.5)
-         .font('Helvetica-Bold')
-         .text(`Sesi ${sessionIndex + 1}: ${sessionDate} | ${session.time}`, 60, y + 5);
+      coach.sessions.forEach(session => {
+        if (y > doc.page.height - 100) {
+          doc.addPage();
+          y = 50;
+        }
 
-      y += 20;
+        // Session Header
+        doc.rect(50, y, doc.page.width - 100, 14).fill('#e0f2fe');
+        doc.fillColor('#0369a1').fontSize(6.5).font('Helvetica-Bold')
+          .text(`${session.scheduleType} | ${new Date(session.date).toLocaleDateString('id-ID')} | ${session.time}`, 60, y + 3, { width: 300 })
+          .text(`${session.programCategory}`, 380, y + 3, { width: 165 });
 
-      doc.fillColor('#000000')
-         .fontSize(6.5)
-         .font('Helvetica')
-         .text(`Lokasi: ${session.location} | Program: ${session.level} | Status: ${session.status}`, 60, y);
+        y += 16;
 
-      y += 13;
+        doc.fillColor('#000').fontSize(6).font('Helvetica')
+          .text(`Program: ${session.program} | Lokasi: ${session.location}`, 60, y);
+        y += 10;
 
-      if (session.evaluations && session.evaluations.length > 0) {
-        doc.rect(50, y, doc.page.width - 100, 16).fill('#10b981');
-        
-        doc.fillColor('#ffffff')
-           .fontSize(6.5)
-           .font('Helvetica-Bold')
-           .text('Siswa', 60, y + 4, { width: 115 })
-           .text('Hadir', 180, y + 4, { width: 55 })
-           .text('Catatan Evaluasi', 240, y + 4, { width: 295 });
+        doc.fillColor('#0ea5e9').fontSize(6).font('Helvetica-Bold')
+          .text(`Siswa: ${session.students}`, 60, y);
+        y += 10;
 
-        y += 18;
+        // Evaluations
+        if (session.evaluations && session.evaluations.length > 0) {
+          doc.rect(50, y, doc.page.width - 100, 12).fill('#10b981');
+          doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+            .text('Siswa', 60, y + 2, { width: 100 })
+            .text('Kehadiran', 165, y + 2, { width: 50 })
+            .text('Catatan', 220, y + 2, { width: 325 });
 
-        session.evaluations.forEach((evalItem, i) => {
-          const evalNotes = evalItem.notes || '-';
-          const evalWidth = 295;
-          const fontSize = 6.5;
-          const avgCharWidth = fontSize * 0.52;
-          const charsPerLine = Math.floor(evalWidth / avgCharWidth);
-          const lines = Math.ceil(evalNotes.length / charsPerLine);
-          const lineHeight = 7.5;
-          const textHeight = lines * lineHeight;
-          const rowHeight = Math.max(14, textHeight + 3);
+          y += 14;
 
-          if (y + rowHeight > doc.page.height - PAGE_BOTTOM_MARGIN) {
-            doc.addPage();
-            y = 50;
-          }
+          session.evaluations.forEach((athlete, aidx) => {
+            if (y > doc.page.height - 40) {
+              doc.addPage();
+              y = 50;
+            }
 
-          const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
-          doc.rect(50, y, doc.page.width - 100, rowHeight).fill(bgColor);
+            const bgColor = aidx % 2 === 0 ? '#f9fafb' : '#ffffff';
+            const noteLines = (athlete.notes || '').split('\\n').length || 1;
+            const rowHeight = Math.max(12, noteLines * 8 + 2);
 
-          doc.strokeColor('#e5e7eb').lineWidth(0.3)
-             .moveTo(180, y).lineTo(180, y + rowHeight)
-             .moveTo(240, y).lineTo(240, y + rowHeight)
-             .stroke();
+            doc.rect(50, y, doc.page.width - 100, rowHeight).fill(bgColor);
 
-          const centerY = rowHeight > 18 ? 3.5 : Math.max(3.5, (rowHeight - 8) / 2);
+            doc.fillColor('#000').fontSize(5.5).font('Helvetica')
+              .text(athlete.studentName, 60, y + 2, { width: 100 })
+              .text(athlete.attendance, 165, y + 2, { width: 50 });
 
-          doc.fillColor('#000000')
-             .fontSize(6)
-             .font('Helvetica');
+            doc.fillColor('#000').fontSize(5.5).font('Helvetica')
+              .text(athlete.notes, 220, y + 2, { 
+                width: 325,
+                height: rowHeight - 4,
+                align: 'left',
+                ellipsis: false
+              });
 
-          doc.text(`${evalItem.studentName} (${evalItem.studentId})`, 60, y + centerY, { width: 115 });
-          doc.text(evalItem.attendance, 180, y + centerY, { width: 55, align: 'center' });
-          
-          doc.text(evalNotes, 240, y + 2.5, { 
-            width: evalWidth,
-            align: 'left',
-            lineGap: 0
+            y += rowHeight;
           });
+        }
 
-          y += rowHeight;
-        });
-      } else {
-        doc.fillColor('#999999')
-           .fontSize(6.5)
-           .font('Helvetica-Oblique')
-           .text('Belum ada evaluasi', 60, y);
-        
-        y += 13;
-      }
+        y += 6;
+      });
+    }
 
-      y += 8;
-    });
-
-    y += 18;
+    y += 10;
   });
 }
 
-// ==================== FINANCIAL PDF ====================
 
-async function renderFinancialPDF(doc, payments, totalRevenue, stats) {
-  let y = 145;
-  const PAGE_BOTTOM_MARGIN = 75;
+// ==================== PDF RENDER: FINANCIAL ====================
+async function renderFinancialPDF(doc, data) {
+  let y = 125;
 
-  doc.roundedRect(50, y, doc.page.width - 100, stats ? 75 : 55, 5)
-     .fillAndStroke('#fef3c7', '#f59e0b');
+  doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
+    .fillAndStroke('#fef3c7', '#f59e0b');
+  doc.fillColor('#f59e0b').fontSize(12).font('Helvetica-Bold')
+    .text(`Total Pendapatan: Rp ${data.totalRevenue.toLocaleString('id-ID')}`, 70, y + 10);
+  doc.fontSize(9).fillColor('#6b7280').font('Helvetica')
+    .text(`Total Transaksi: ${data.stats.totalPayments}`, 70, y + 28)
+    .text(`Lunas: ${data.stats.paidCount} | Pending: ${data.stats.pendingCount}`, 70, y + 42)
+    .text(`Rata-rata: Rp ${data.stats.averagePayment.toLocaleString('id-ID')}`, 70, y + 56);
 
-  doc.fillColor('#f59e0b')
-     .fontSize(13)
-     .font('Helvetica-Bold')
-     .text(`Total Pendapatan: Rp ${totalRevenue.toLocaleString('id-ID')}`, 70, y + 10);
+  y += 75;
 
-  doc.fontSize(9)
-     .fillColor('#6b7280')
-     .font('Helvetica')
-     .text(`Total Transaksi: ${payments.length}`, 70, y + 30);
+  doc.rect(50, y, doc.page.width - 100, 14).fill('#f59e0b');
+  doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+    .text('Tanggal', 60, y + 3, { width: 60 })
+    .text('Siswa', 125, y + 3, { width: 100 })
+    .text('Bulan', 230, y + 3, { width: 50 })
+    .text('Jumlah', 285, y + 3, { width: 60 })
+    .text('Metode', 350, y + 3, { width: 45 });
 
-  if (stats) {
-    doc.text(`Lunas: ${stats.paidCount} | Pending: ${stats.pendingCount}`, 70, y + 45);
-    doc.text(`Rata-rata: Rp ${stats.averagePayment.toLocaleString('id-ID')}`, 70, y + 60);
-  }
+  y += 16;
 
-  y += stats ? 85 : 65;
-
-  const renderTableHeader = (startY) => {
-    doc.rect(50, startY, doc.page.width - 100, 18).fill('#f59e0b');
-
-    doc.fillColor('#ffffff')
-       .fontSize(6.5)
-       .font('Helvetica-Bold')
-       .text('Tanggal', 60, startY + 5, { width: 65 })
-       .text('Siswa', 130, startY + 5, { width: 95 })
-       .text('Bulan', 230, startY + 5, { width: 55 })
-       .text('Jumlah', 290, startY + 5, { width: 65 })
-       .text('Metode', 360, startY + 5, { width: 55 })
-       .text('Status', 420, startY + 5, { width: 55 });
-
-    return startY + 20;
-  };
-
-  y = renderTableHeader(y);
-
-  payments.forEach((payment, i) => {
-    if (y > doc.page.height - PAGE_BOTTOM_MARGIN) {
+  data.payments.slice(0, 50).forEach((p, i) => {
+    if (y > doc.page.height - 40) {
       doc.addPage();
       y = 50;
-      y = renderTableHeader(y);
     }
 
     const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
-    doc.rect(50, y, doc.page.width - 100, 16).fill(bgColor);
+    doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
 
-    const dateStr = payment.date ? new Date(payment.date).toLocaleDateString('id-ID') : '-';
+    doc.fillColor('#000').fontSize(6).font('Helvetica')
+      .text(new Date(p.date).toLocaleDateString('id-ID'), 60, y + 2, { width: 60 })
+      .text(p.student, 125, y + 2, { width: 100, ellipsis: true })
+      .text(p.month, 230, y + 2, { width: 50 })
+      .text(`Rp ${p.amount.toLocaleString('id-ID')}`, 285, y + 2, { width: 60 })
+      .text(p.method, 350, y + 2, { width: 45 });
 
-    doc.fillColor('#000000')
-       .fontSize(6.5)
-       .font('Helvetica')
-       .text(dateStr, 60, y + 4, { width: 65 })
-       .text(payment.studentName, 130, y + 4, { width: 95, ellipsis: true })
-       .text(payment.month, 230, y + 4, { width: 55 })
-       .text(`Rp ${payment.amount.toLocaleString('id-ID')}`, 290, y + 4, { width: 65 })
-       .text(payment.method, 360, y + 4, { width: 55 })
-       .text(payment.status, 420, y + 4, { width: 55 });
-
-    y += 16;
+    y += 12;
   });
-
-  if (payments.length === 0) {
-    doc.fontSize(9)
-       .fillColor('#6b7280')
-       .text('Tidak ada data pembayaran', 50, y + 15, { align: 'center', width: doc.page.width - 100 });
-  }
 }
 
-// ==================== EXCEL EXPORT ====================
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ EXCEL EXPORT
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
 async function exportToExcelBeautiful(res, title, data, reportType) {
   try {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet(title);
+    const worksheet = workbook.addWorksheet(title.substring(0, 31));
 
     const headerStyle = {
-      font: { bold: true, color: { argb: 'FFFFFFFF' } },
+      font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 },
       fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0ea5e9' } },
-      alignment: { vertical: 'middle', horizontal: 'center' }
+      alignment: { vertical: 'middle', horizontal: 'center', wrapText: true }
     };
 
-    const wrapTextStyle = {
-      alignment: { 
-        vertical: 'top', 
-        horizontal: 'left',
-        wrapText: true
-      }
-    };
-
-    if (reportType === 'student-individual' && data.student) {
+    // ==================== STUDENT REPORT ====================
+    if (reportType === 'student-individual') {
       worksheet.columns = [
         { header: 'Tanggal', key: 'date', width: 12 },
         { header: 'Waktu', key: 'time', width: 12 },
         { header: 'Lokasi', key: 'location', width: 15 },
+        { header: 'Schedule Type', key: 'scheduleType', width: 15 },
+        { header: 'Kategori', key: 'programCategory', width: 15 },
         { header: 'Program', key: 'program', width: 18 },
-        { header: 'Pelatih', key: 'coachName', width: 20 },
+        { header: 'Pelatih', key: 'coachNames', width: 30 },
         { header: 'Kehadiran', key: 'attendance', width: 12 },
-        { header: 'Evaluasi', key: 'notes', width: 80 }
+        { header: 'Catatan', key: 'notes', width: 40 }
       ];
 
       worksheet.getRow(1).eachCell(cell => cell.style = headerStyle);
 
       worksheet.addRow({});
-      worksheet.addRow({ date: 'Nama Siswa:', time: data.student.fullName });
-      worksheet.addRow({ date: 'ID Siswa:', time: data.student.studentId });
-      worksheet.addRow({ date: 'Level:', time: data.student.classLevel });
-      worksheet.addRow({ date: 'Status:', time: data.student.status });
-      worksheet.addRow({ date: 'Total Sesi:', time: data.history.length });
+      worksheet.addRow({ date: 'Nama:', time: data.student.fullName });
+      worksheet.addRow({ date: 'ID:', time: data.student.studentId });
       worksheet.addRow({});
 
-      const historyHeaderRow = worksheet.addRow({
-        date: 'Tanggal',
-        time: 'Waktu',
-        location: 'Lokasi',
-        program: 'Program',
-        coachName: 'Pelatih',
-        attendance: 'Kehadiran',
-        notes: 'Evaluasi'
-      });
-      historyHeaderRow.eachCell(cell => cell.style = headerStyle);
-
       data.history.forEach(item => {
-        const row = worksheet.addRow({
-          date: item.date ? new Date(item.date).toLocaleDateString('id-ID') : '-',
+        worksheet.addRow({
+          date: new Date(item.date).toLocaleDateString('id-ID'),
           time: item.time,
           location: item.location,
+          scheduleType: item.scheduleType,
+          programCategory: item.programCategory,
           program: item.program,
-          coachName: item.coachName,
+          coachNames: item.coachNames,
           attendance: item.attendance,
           notes: item.notes
         });
+      });
+    }
+    // ==================== COACH REPORT ====================
+    else if (reportType === 'coach') {
+      // Sheet 1: Schedule Type Summary
+      const summarySheet = workbook.addWorksheet('Ringkasan Schedule Type');
+      summarySheet.columns = [
+        { header: 'Pelatih', key: 'name', width: 20 },
+        { header: 'Schedule Type (Kategori)', key: 'typeKey', width: 30 },
+        { header: 'Total', key: 'total', width: 10 },
+        { header: 'Selesai', key: 'completed', width: 10 },
+        { header: 'Batal', key: 'cancelled', width: 10 }
+      ];
+      summarySheet.getRow(1).eachCell(cell => cell.style = headerStyle);
 
-        row.getCell('notes').style = wrapTextStyle;
-        row.height = 30;
+      data.coaches.forEach(coach => {
+        coach.scheduleTypeStats.forEach((stat, idx) => {
+          summarySheet.addRow({
+            name: idx === 0 ? coach.name : '',
+            typeKey: stat.typeKey,
+            total: stat.total,
+            completed: stat.completed,
+            cancelled: stat.cancelled
+          });
+        });
+        summarySheet.addRow({});
       });
 
-    } else if (reportType === 'coach' && data.coaches) {
+      // Sheet 2: Session Details
       worksheet.columns = [
-        { header: 'Pelatih', key: 'coachName', width: 20 },
+        { header: 'Pelatih', key: 'name', width: 18 },
         { header: 'Tanggal', key: 'date', width: 12 },
         { header: 'Waktu', key: 'time', width: 12 },
-        { header: 'Program', key: 'level', width: 18 },
+        { header: 'Schedule Type', key: 'scheduleType', width: 15 },
+        { header: 'Kategori', key: 'programCategory', width: 15 },
+        { header: 'Program', key: 'program', width: 15 },
         { header: 'Lokasi', key: 'location', width: 15 },
-        { header: 'Status', key: 'status', width: 12 },
-        { header: 'Siswa', key: 'studentName', width: 25 },
+        { header: 'Status', key: 'status', width: 10 },
+        { header: 'Siswa', key: 'athlete', width: 20 },
         { header: 'Kehadiran', key: 'attendance', width: 12 },
-        { header: 'Catatan Evaluasi', key: 'evalNotes', width: 80 }
+        { header: 'Catatan', key: 'notes', width: 50 }
       ];
 
       worksheet.getRow(1).eachCell(cell => cell.style = headerStyle);
@@ -731,42 +805,44 @@ async function exportToExcelBeautiful(res, title, data, reportType) {
       data.coaches.forEach(coach => {
         coach.sessions.forEach(session => {
           if (session.evaluations && session.evaluations.length > 0) {
-            session.evaluations.forEach(evalItem => {
-              const row = worksheet.addRow({
-                coachName: coach.coachName,
-                date: session.date ? new Date(session.date).toLocaleDateString('id-ID') : '-',
+            session.evaluations.forEach((athlete, idx) => {
+              worksheet.addRow({
+                name: idx === 0 ? coach.name : '',
+                date: new Date(session.date).toLocaleDateString('id-ID'),
                 time: session.time,
-                level: session.level,
+                scheduleType: session.scheduleType,
+                programCategory: session.programCategory,
+                program: session.program,
                 location: session.location,
                 status: session.status,
-                studentName: evalItem.studentName,
-                attendance: evalItem.attendance,
-                evalNotes: evalItem.notes
+                athlete: athlete.studentName,
+                attendance: athlete.attendance,
+                notes: athlete.notes
               });
-
-              row.getCell('evalNotes').style = wrapTextStyle;
-              row.height = 30;
             });
           } else {
             worksheet.addRow({
-              coachName: coach.coachName,
-              date: session.date ? new Date(session.date).toLocaleDateString('id-ID') : '-',
+              name: coach.name,
+              date: new Date(session.date).toLocaleDateString('id-ID'),
               time: session.time,
-              level: session.level,
+              scheduleType: session.scheduleType,
+              programCategory: session.programCategory,
+              program: session.program,
               location: session.location,
               status: session.status,
-              studentName: session.students,
+              athlete: session.students,
               attendance: '-',
-              evalNotes: 'Belum ada evaluasi'
+              notes: 'Belum ada evaluasi'
             });
           }
         });
       });
-
-    } else if (reportType === 'financial' && data.payments) {
+    }
+    // ==================== FINANCIAL REPORT ====================
+    else if (reportType === 'financial') {
       worksheet.columns = [
         { header: 'Tanggal', key: 'date', width: 12 },
-        { header: 'Siswa', key: 'studentName', width: 25 },
+        { header: 'Siswa', key: 'student', width: 25 },
         { header: 'Bulan', key: 'month', width: 12 },
         { header: 'Jumlah', key: 'amount', width: 15 },
         { header: 'Metode', key: 'method', width: 12 },
@@ -777,8 +853,8 @@ async function exportToExcelBeautiful(res, title, data, reportType) {
 
       data.payments.forEach(p => {
         worksheet.addRow({
-          date: p.date ? new Date(p.date).toLocaleDateString('id-ID') : '-',
-          studentName: p.studentName,
+          date: new Date(p.date).toLocaleDateString('id-ID'),
+          student: p.student,
           month: p.month,
           amount: p.amount,
           method: p.method,
@@ -787,28 +863,10 @@ async function exportToExcelBeautiful(res, title, data, reportType) {
       });
 
       const totalRow = worksheet.addRow({
-        date: '',
-        studentName: 'TOTAL',
-        month: '',
-        amount: data.totalRevenue,
-        method: '',
-        status: ''
+        student: 'TOTAL',
+        amount: data.totalRevenue
       });
       totalRow.font = { bold: true };
-      totalRow.getCell('amount').fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFEF3C7' }
-      };
-      
-      if (data.stats) {
-        worksheet.addRow({});
-        worksheet.addRow({ studentName: 'STATISTIK' }).font = { bold: true };
-        worksheet.addRow({ studentName: 'Total Transaksi:', month: data.stats.totalPayments });
-        worksheet.addRow({ studentName: 'Lunas:', month: data.stats.paidCount });
-        worksheet.addRow({ studentName: 'Pending:', month: data.stats.pendingCount });
-        worksheet.addRow({ studentName: 'Rata-rata:', amount: data.stats.averagePayment });
-      }
     }
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -817,16 +875,17 @@ async function exportToExcelBeautiful(res, title, data, reportType) {
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
-    console.error('Error generating Excel:', error);
+    console.error('❌ Error Excel:', error);
     if (!res.headersSent) {
-      res.status(500).json({ 
-        success: false, 
-        message: 'Error generating Excel report',
-        error: error.message 
-      });
+      res.status(500).json({ success: false, message: 'Error generating Excel' });
     }
   }
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// 📋 MODULE EXPORTS
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
 module.exports = {
   getStudentExportData,

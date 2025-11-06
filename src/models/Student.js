@@ -52,6 +52,10 @@ const studentSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Address is required']
   },
+  sessions:{
+    type:Number,
+    // required: [true, 'sessions is required']
+  },
 
   // ==================== PROGRAM INFO ====================
   programType: {
