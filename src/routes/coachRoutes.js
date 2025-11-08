@@ -11,7 +11,8 @@ const {
   deleteCoachPhoto,
   getCoachStats,
   searchCoaches,
-  filterByStatus
+  filterByStatus,
+  getAllCoachesSimple
 } = require('../controllers/coachController');
 
 // Statistics (must be before /:id)
@@ -22,6 +23,7 @@ router.get('/search', searchCoaches);
 
 // Filter
 router.get('/filter', filterByStatus);
+router.get('/simple', getAllCoachesSimple);
 
 // CRUD routes
 router.route('/')

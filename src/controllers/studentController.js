@@ -1,5 +1,7 @@
-// controllers/studentController.js
+// backend/src/controllers/studentController.js - CLEANED & OPTIMIZED WITH PAGINATION
+
 const Student = require('../models/Student');
+const TrainingEvaluation = require('../models/TrainingEvaluation');
 const fs = require('fs');
 const path = require('path');
 const whatsappService = require('../services/whatsappService');
@@ -9,16 +11,14 @@ const whatsappService = require('../services/whatsappService');
 /**
  * @desc    Upload student photo
  * @route   POST /api/students/:id/photo
- * @access  Public
+ * @access  Private
  */
 exports.uploadStudentPhoto = async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
 
     if (!student) {
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
+      if (req.file) fs.unlinkSync(req.file.path);
       return res.status(404).json({
         success: false,
         message: 'Student not found'
@@ -50,11 +50,7 @@ exports.uploadStudentPhoto = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error uploading photo:', error);
-    
-    if (req.file) {
-      fs.unlinkSync(req.file.path);
-    }
-
+    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({
       success: false,
       message: 'Error uploading photo',
@@ -66,7 +62,7 @@ exports.uploadStudentPhoto = async (req, res) => {
 /**
  * @desc    Delete student photo
  * @route   DELETE /api/students/:id/photo
- * @access  Public
+ * @access  Private
  */
 exports.deleteStudentPhoto = async (req, res) => {
   try {
@@ -111,9 +107,7 @@ exports.deleteStudentPhoto = async (req, res) => {
 const deletePhotoFile = (photoPath) => {
   try {
     if (!photoPath) return;
-
     const fullPath = path.join(__dirname, '../../', photoPath);
-    
     if (fs.existsSync(fullPath)) {
       fs.unlinkSync(fullPath);
       console.log('🗑️ Photo deleted:', photoPath);
@@ -126,47 +120,116 @@ const deletePhotoFile = (photoPath) => {
 // ==================== CRUD OPERATIONS ====================
 
 /**
- * @desc    Get all students
+ * ✅ @desc    Get all students WITH pagination & training count
  * @route   GET /api/students
  * @access  Public
+ * 
+ * Query params:
+ * - status: 'Aktif' | 'Non-Aktif' | 'Cuti' | 'Semua'
+ * - search: search query
+ * - page: page number (default: 1)
+ * - limit: items per page (default: 10)
+ * - sortBy: field to sort by (default: 'createdAt')
+ * - order: 'asc' | 'desc' (default: 'desc')
  */
 exports.getAllStudents = async (req, res) => {
   try {
-    const { status, search, page = 1, limit = 10 } = req.query;
+    const { 
+      status, 
+      search, 
+      page = 1, 
+      limit = 10,
+      sortBy = 'createdAt',
+      order = 'desc'
+    } = req.query;
 
+    console.log('📋 Getting all students with pagination');
+    console.log('   Params:', { status, search, page, limit, sortBy, order });
+
+    // ✅ Build query filter
     let query = {};
 
     if (status && status !== 'Semua') {
       query.status = status;
     }
 
-    if (search) {
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
       query.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { studentId: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { parentName: { $regex: search, $options: 'i' } }
+        { fullName: searchRegex },
+        { studentId: searchRegex },
+        { phone: searchRegex },
+        { parentName: searchRegex }
       ];
     }
 
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    // ✅ Parse pagination
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
 
-    const students = await Student.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
+    // ✅ Get total count
+    const totalCount = await Student.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limitNum);
 
-    const total = await Student.countDocuments(query);
+    // ✅ Build sort object
+    const sortOrder = order === 'desc' ? -1 : 1;
+    const sortObj = { [sortBy]: sortOrder };
+
+    // ✅ Get students with pagination
+    const students = await Student.find(query)
+      .select('-__v')
+      .sort(sortObj)
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    console.log(`✅ Found ${students.length} students (page ${pageNum}/${totalPages})`);
+
+    // ✅ Get training count untuk setiap student
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    const studentsWithCounts = await Promise.all(
+      students.map(async (student) => {
+        try {
+          const trainingCountThisMonth = await TrainingEvaluation.getMonthCount(
+            student._id,
+            currentYear,
+            currentMonth
+          );
+
+          return {
+            ...student,
+            trainingCountThisMonth
+          };
+        } catch (error) {
+          console.error(`❌ Error getting count for ${student._id}:`, error);
+          return {
+            ...student,
+            trainingCountThisMonth: 0
+          };
+        }
+      })
+    );
 
     res.status(200).json({
       success: true,
-      count: students.length,
-      total,
-      totalPages: Math.ceil(total / limitNum),
-      currentPage: pageNum,
-      data: students
+      data: studentsWithCounts,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: totalPages,
+        totalItems: totalCount,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPrevPage: pageNum > 1
+      },
+      meta: {
+        sortBy,
+        order,
+        timestamp: new Date().toISOString()
+      }
     });
   } catch (error) {
     console.error('❌ Error in getAllStudents:', error);
@@ -207,74 +270,11 @@ exports.getStudentById = async (req, res) => {
     });
   }
 };
-// backend/src/controllers/studentController.js
-
-const TrainingEvaluation = require('../models/TrainingEvaluation');
-
-/**
- * ✅ Get all students WITH training count dari TrainingEvaluation
- */
-exports.getStudents = async (req, res) => {
-  try {
-    console.log('📥 Getting all students with training count');
-
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-
-    // Get all students
-    const students = await Student.find({ status: 'Aktif' })
-      .select('-__v')
-      .sort({ registrationDate: -1 })
-      .lean();
-
-    console.log(`✅ Found ${students.length} students`);
-
-    // Untuk setiap student, query training count dari TrainingEvaluation
-    const studentsWithCounts = await Promise.all(
-      students.map(async (student) => {
-        try {
-          const trainingCountThisMonth = await TrainingEvaluation.getMonthCount(
-            student._id,
-            currentYear,
-            currentMonth
-          );
-
-          return {
-            ...student,
-            trainingCountThisMonth
-          };
-        } catch (error) {
-          console.error(`❌ Error getting count for ${student._id}:`, error);
-          return {
-            ...student,
-            trainingCountThisMonth: 0
-          };
-        }
-      })
-    );
-
-    console.log(`✅ Loaded ${studentsWithCounts.length} students with counts`);
-
-    res.status(200).json({
-      success: true,
-      count: studentsWithCounts.length,
-      data: studentsWithCounts
-    });
-  } catch (error) {
-    console.error('❌ Error getting students:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching students',
-      error: error.message
-    });
-  }
-};
 
 /**
  * @desc    Create new student
  * @route   POST /api/students
- * @access  Public
+ * @access  Private
  */
 exports.createStudent = async (req, res) => {
   try {
@@ -327,7 +327,7 @@ exports.createStudent = async (req, res) => {
 /**
  * @desc    Update student
  * @route   PUT /api/students/:id
- * @access  Public
+ * @access  Private
  */
 exports.updateStudent = async (req, res) => {
   try {
@@ -396,7 +396,7 @@ exports.updateStudent = async (req, res) => {
 /**
  * @desc    Delete student
  * @route   DELETE /api/students/:id
- * @access  Public
+ * @access  Private
  */
 exports.deleteStudent = async (req, res) => {
   try {
@@ -469,7 +469,7 @@ exports.getStudentStats = async (req, res) => {
 // ==================== SEARCH & FILTER ====================
 
 /**
- * @desc    Search students
+ * @desc    Search students (quick search - max 20 results)
  * @route   GET /api/students/search
  * @access  Public
  */
@@ -477,21 +477,25 @@ exports.searchStudents = async (req, res) => {
   try {
     const { q } = req.query;
 
-    if (!q) {
+    if (!q || q.trim().length < 2) {
       return res.status(400).json({
         success: false,
-        message: 'Search query is required'
+        message: 'Search query must be at least 2 characters'
       });
     }
 
+    const searchRegex = new RegExp(q.trim(), 'i');
     const students = await Student.find({
       $or: [
-        { fullName: { $regex: q, $options: 'i' } },
-        { studentId: { $regex: q, $options: 'i' } },
-        { phone: { $regex: q, $options: 'i' } },
-        { parentName: { $regex: q, $options: 'i' } }
+        { fullName: searchRegex },
+        { studentId: searchRegex },
+        { phone: searchRegex },
+        { parentName: searchRegex }
       ]
-    }).limit(20);
+    })
+    .select('_id studentId fullName phone status photo')
+    .limit(20)
+    .lean();
 
     res.status(200).json({
       success: true,
@@ -524,7 +528,10 @@ exports.filterByStatus = async (req, res) => {
       });
     }
 
-    const students = await Student.find({ status });
+    const students = await Student.find({ status })
+      .select('-__v')
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.status(200).json({
       success: true,
@@ -541,18 +548,10 @@ exports.filterByStatus = async (req, res) => {
   }
 };
 
-// ==================== PAYMENT REMINDER - MANUAL ONLY ====================
+// ==================== PAYMENT REMINDER ====================
 
 /**
- * ✅ @desc    Send payment reminder via WhatsApp (MANUAL - NO AUTO)
- * ✅ @route   POST /api/students/:id/send-reminder
- * ✅ @access  Public
- */
-
-
-
-/**
- * @desc    Send payment reminder via WhatsApp gateway
+ * @desc    Send payment reminder via WhatsApp (MANUAL ONLY)
  * @route   POST /api/students/:id/send-reminder
  * @access  Private
  */
@@ -582,7 +581,6 @@ exports.sendPaymentReminder = async (req, res) => {
     console.log('👤 Student:', studentName);
     console.log('💳 Last payment:', lastPaymentDate);
     console.log('🏊 Training count:', trainingCount);
-    console.log('📨 Message preview:', message.substring(0, 50) + '...');
 
     // ✅ CHECK WHATSAPP STATUS
     const waStatus = whatsappService.getStatus();
@@ -628,24 +626,20 @@ exports.sendPaymentReminder = async (req, res) => {
         sendResult.method = 'failed';
       }
     } else {
-      console.warn('⚠️ WhatsApp not connected, status only');
+      console.warn('⚠️ WhatsApp not connected');
       sendResult.status = 'not_connected';
     }
 
-    // ✅ LOG KE CONSOLE (bukan database)
-    console.log('📋 Reminder Log:');
-    console.log({
+    // ✅ LOG
+    console.log('📋 Reminder Log:', {
       studentId: student._id,
       studentName: student.fullName,
       phone: phone,
-      lastPaymentDate: lastPaymentDate,
-      trainingCount: trainingCount,
       status: sendResult.status,
-      method: sendResult.method,
       timestamp: new Date().toISOString()
     });
 
-    // ✅ RESPONSE KE FRONTEND
+    // ✅ RESPONSE
     res.status(200).json({
       success: true,
       message: `Reminder ${sendResult.status === 'sent' ? 'sent' : 'processed'} successfully`,
@@ -676,5 +670,4 @@ exports.sendPaymentReminder = async (req, res) => {
   }
 };
 
-
-
+module.exports = exports;

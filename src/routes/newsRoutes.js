@@ -11,11 +11,13 @@ const {
   uploadCoverImage,
   deleteCoverImage,
   incrementViews,
-  getNewsStats
+  getNewsStats,
+  getAllNewsSimple
 } = require('../controllers/newsController');
 
 // Statistics (must be before /:id)
 router.get('/stats', getNewsStats);
+router.get('/simple', getAllNewsSimple);
 
 // Slug route (must be before /:id)
 router.get('/slug/:slug', getNewsBySlug);

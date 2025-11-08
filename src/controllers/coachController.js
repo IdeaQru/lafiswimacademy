@@ -1,3 +1,5 @@
+// backend/src/controllers/coachController.js - FIXED WITH PAGINATION
+
 const Coach = require('../models/Coach');
 const fs = require('fs');
 const path = require('path');
@@ -20,55 +22,119 @@ const deletePhotoFile = (photoPath) => {
   }
 };
 
-// @desc    Get all coaches
+// @desc    Get all coaches with pagination
 // @route   GET /api/coaches
 // @access  Public
 exports.getAllCoaches = async (req, res) => {
   try {
-    const { status, experience, search, page = 1, limit = 10 } = req.query;
+    const { 
+      status, 
+      experience, 
+      search, 
+      page = 1, 
+      limit = 10,
+      sortBy = 'createdAt',
+      order = 'desc'
+    } = req.query;
+
+    console.log('📋 Getting all coaches with pagination');
 
     // Build query
     let query = {};
 
+    // Status filter
     if (status && status !== 'Semua') {
       query.status = status;
     }
 
+    // Experience filter
     if (experience) {
       query.experience = { $gte: parseInt(experience) };
     }
 
-    if (search) {
+    // Search filter
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
       query.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { coachId: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { fullName: searchRegex },
+        { coachId: searchRegex },
+        { phone: searchRegex },
+        { email: searchRegex },
+        { specialization: searchRegex }
       ];
     }
 
     // Pagination
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
     const skip = (pageNum - 1) * limitNum;
 
-    const coaches = await Coach.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
+    // Count total documents
+    const totalCount = await Coach.countDocuments(query);
+    const totalPages = Math.ceil(totalCount / limitNum);
 
-    const total = await Coach.countDocuments(query);
+    // Sort
+    const sortOrder = order === 'desc' ? -1 : 1;
+    const sortObj = { [sortBy]: sortOrder };
+
+    // Fetch coaches
+    const coaches = await Coach.find(query)
+      .select('-__v')
+      .sort(sortObj)
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    console.log(`✅ Found ${coaches.length} coaches (page ${pageNum}/${totalPages})`);
+
+    res.status(200).json({
+      success: true,
+      data: coaches,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: totalPages,
+        totalItems: totalCount,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPrevPage: pageNum > 1
+      },
+      meta: {
+        sortBy,
+        order,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error in getAllCoaches:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving coaches',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Get all coaches without pagination (for dropdowns)
+// @route   GET /api/coaches/simple
+// @access  Public
+exports.getAllCoachesSimple = async (req, res) => {
+  try {
+    console.log('📋 Getting all coaches (simple)');
+
+    const coaches = await Coach.find({ status: 'Aktif' })
+      .select('_id coachId fullName email phone specialization photo')
+      .sort({ fullName: 1 })
+      .lean();
+
+    console.log(`✅ Found ${coaches.length} active coaches`);
 
     res.status(200).json({
       success: true,
       count: coaches.length,
-      total,
-      totalPages: Math.ceil(total / limitNum),
-      currentPage: pageNum,
       data: coaches
     });
   } catch (error) {
-    console.error('❌ Error in getAllCoaches:', error);
+    console.error('❌ Error in getAllCoachesSimple:', error);
     res.status(500).json({
       success: false,
       message: 'Error retrieving coaches',
@@ -132,19 +198,23 @@ exports.createCoach = async (req, res) => {
     }
 
     // Check if email already exists
-    const existingEmail = await Coach.findOne({ email: coachData.email });
-    
-    if (existingEmail) {
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
+    if (coachData.email) {
+      const existingEmail = await Coach.findOne({ email: coachData.email });
+      
+      if (existingEmail) {
+        if (req.file) {
+          fs.unlinkSync(req.file.path);
+        }
+        return res.status(400).json({
+          success: false,
+          message: 'Email already exists'
+        });
       }
-      return res.status(400).json({
-        success: false,
-        message: 'Email already exists'
-      });
     }
 
     const coach = await Coach.create(coachData);
+
+    console.log('✅ Coach created:', coach.fullName);
 
     res.status(201).json({
       success: true,
@@ -205,7 +275,11 @@ exports.updateCoach = async (req, res) => {
 
     // Check if trying to update coachId to an existing one
     if (updateData.coachId && updateData.coachId !== coach.coachId) {
-      const existingCoach = await Coach.findOne({ coachId: updateData.coachId });
+      const existingCoach = await Coach.findOne({ 
+        coachId: updateData.coachId,
+        _id: { $ne: req.params.id }
+      });
+      
       if (existingCoach) {
         if (req.file) {
           fs.unlinkSync(req.file.path);
@@ -219,7 +293,11 @@ exports.updateCoach = async (req, res) => {
 
     // Check if trying to update email to an existing one
     if (updateData.email && updateData.email !== coach.email) {
-      const existingEmail = await Coach.findOne({ email: updateData.email });
+      const existingEmail = await Coach.findOne({ 
+        email: updateData.email,
+        _id: { $ne: req.params.id }
+      });
+      
       if (existingEmail) {
         if (req.file) {
           fs.unlinkSync(req.file.path);
@@ -239,6 +317,8 @@ exports.updateCoach = async (req, res) => {
         runValidators: true
       }
     );
+
+    console.log('✅ Coach updated:', coach.fullName);
 
     res.status(200).json({
       success: true,
@@ -283,7 +363,7 @@ exports.deleteCoach = async (req, res) => {
       });
     }
 
-    // DELETE PHOTO FILE IF EXISTS
+    // Delete photo file if exists
     if (coach.photo) {
       console.log('🗑️ Deleting coach photo:', coach.photo);
       deletePhotoFile(coach.photo);
@@ -347,6 +427,7 @@ exports.uploadCoachPhoto = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Photo uploaded successfully',
+      photo: photoUrl,
       data: coach
     });
   } catch (error) {
@@ -392,6 +473,8 @@ exports.deleteCoachPhoto = async (req, res) => {
     coach.photo = null;
     await coach.save();
 
+    console.log('✅ Coach photo deleted');
+
     res.status(200).json({
       success: true,
       message: 'Photo deleted successfully',
@@ -412,6 +495,8 @@ exports.deleteCoachPhoto = async (req, res) => {
 // @access  Public
 exports.getCoachStats = async (req, res) => {
   try {
+    console.log('📊 Getting coach statistics');
+
     const totalCoaches = await Coach.countDocuments();
     const activeCoaches = await Coach.countDocuments({ status: 'Aktif' });
     const inactiveCoaches = await Coach.countDocuments({ status: 'Non-Aktif' });
@@ -439,6 +524,8 @@ exports.getCoachStats = async (req, res) => {
         }
       }
     ]);
+
+    console.log('✅ Stats retrieved');
 
     res.status(200).json({
       success: true,
@@ -475,14 +562,22 @@ exports.searchCoaches = async (req, res) => {
       });
     }
 
+    const searchRegex = new RegExp(q, 'i');
+
     const coaches = await Coach.find({
       $or: [
-        { fullName: { $regex: q, $options: 'i' } },
-        { coachId: { $regex: q, $options: 'i' } },
-        { phone: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } }
+        { fullName: searchRegex },
+        { coachId: searchRegex },
+        { phone: searchRegex },
+        { email: searchRegex },
+        { specialization: searchRegex }
       ]
-    }).limit(20);
+    })
+    .sort({ fullName: 1 })
+    .limit(20)
+    .lean();
+
+    console.log(`🔍 Search "${q}" found ${coaches.length} coaches`);
 
     res.status(200).json({
       success: true,
@@ -513,7 +608,11 @@ exports.filterByStatus = async (req, res) => {
       });
     }
 
-    const coaches = await Coach.find({ status });
+    const coaches = await Coach.find({ status })
+      .sort({ fullName: 1 })
+      .lean();
+
+    console.log(`📋 Filter status "${status}" found ${coaches.length} coaches`);
 
     res.status(200).json({
       success: true,
