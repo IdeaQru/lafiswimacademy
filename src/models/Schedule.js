@@ -5,12 +5,12 @@ const mongoose = require('mongoose');
 const scheduleSchema = new mongoose.Schema({
   // ==================== SCHEDULE TYPE ====================
   /**
-   * ✅ Type: 'individual' (1 coach + 1 student) atau 'group' (multiple)
+   * ✅ Type: 'private' (1 coach + 1 student) atau 'group' (multiple)
    */
   scheduleType: {
     type: String,
-    enum: ['individual', 'group' ,'private'],
-    default: 'individual',
+    enum: ['semiPrivate', 'group' ,'private'],
+    default: 'private',
     required: [true, 'Schedule type is required'],
     index: true
   },
@@ -20,43 +20,43 @@ const scheduleSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Student',
     index: true,
-    // ✅ Required hanya untuk individual schedule
+    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
-        if (this.scheduleType === 'individual') {
+        if (this.scheduleType === 'private') {
           return !!this.studentId;
         }
         return true;
       },
-      message: 'Student ID is required for individual schedule'
+      message: 'Student ID is required for private schedule'
     }
   },
 
   studentName: {
     type: String,
-    // ✅ Required hanya untuk individual schedule
+    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
-        if (this.scheduleType === 'individual') {
+        if (this.scheduleType === 'private') {
           return !!this.studentName;
         }
         return true;
       },
-      message: 'Student name is required for individual schedule'
+      message: 'Student name is required for private schedule'
     }
   },
 
   studentPhone: {
     type: String,
-    // ✅ Required hanya untuk individual schedule
+    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
-        if (this.scheduleType === 'individual') {
+        if (this.scheduleType === 'private') {
           return !!this.studentPhone;
         }
         return true;
       },
-      message: 'Student phone is required for individual schedule'
+      message: 'Student phone is required for private schedule'
     }
   },
 
@@ -64,29 +64,29 @@ const scheduleSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Coach',
     index: true,
-    // ✅ Required hanya untuk individual schedule
+    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
-        if (this.scheduleType === 'individual') {
+        if (this.scheduleType === 'private') {
           return !!this.coachId;
         }
         return true;
       },
-      message: 'Coach ID is required for individual schedule'
+      message: 'Coach ID is required for private schedule'
     }
   },
 
   coachName: {
     type: String,
-    // ✅ Required hanya untuk individual schedule
+    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
-        if (this.scheduleType === 'individual') {
+        if (this.scheduleType === 'private') {
           return !!this.coachName;
         }
         return true;
       },
-      message: 'Coach name is required for individual schedule'
+      message: 'Coach name is required for private schedule'
     }
   },
 
@@ -147,11 +147,9 @@ const scheduleSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Program is required'],
     enum: [
-      'Baby Swimming',
-      'Kids Class',
-      'Teen & Adult',
-      'Private Training',
-      'Competition Team'
+       'Private Training',
+      'Semi Private Training',
+      'Group Class'
     ],
     index: true
   },
@@ -303,11 +301,11 @@ scheduleSchema.index({ 'students._id': 1 });
 // ==================== VIRTUALS ====================
 
 /**
- * ✅ Virtual: Display name (untuk individual maupun group)
+ * ✅ Virtual: Display name (untuk private maupun group)
  */
 scheduleSchema.virtual('displayName').get(function() {
-  if (this.scheduleType === 'individual') {
-    return this.studentName || 'Individual Schedule';
+  if (this.scheduleType === 'private') {
+    return this.studentName || 'private Schedule';
   }
   return this.groupName || 'Group Class';
 });
@@ -316,9 +314,9 @@ scheduleSchema.virtual('displayName').get(function() {
  * ✅ Virtual: Participants info
  */
 scheduleSchema.virtual('participantsInfo').get(function() {
-  if (this.scheduleType === 'individual') {
+  if (this.scheduleType === 'private') {
     return {
-      type: 'individual',
+      type: 'private',
       coach: { name: this.coachName, phone: this.coachPhone },
       student: { name: this.studentName, phone: this.studentPhone }
     };
@@ -409,7 +407,7 @@ scheduleSchema.methods.sendReminder = async function() {
   // Kirim ke semua coach & student
   let recipients = [];
   
-  if (this.scheduleType === 'individual') {
+  if (this.scheduleType === 'private') {
     recipients = [
       { name: this.studentName, phone: this.studentPhone },
       { name: this.coachName, phone: this.coachPhone }
@@ -440,7 +438,7 @@ scheduleSchema.methods.sendReminder = async function() {
  * ✅ Get all participants (untuk notification)
  */
 scheduleSchema.methods.getAllParticipants = function() {
-  if (this.scheduleType === 'individual') {
+  if (this.scheduleType === 'private') {
     return [
       {
         id: this.coachId,
@@ -514,7 +512,7 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
     if (!timeOverlap) continue;
 
     // ✅ Check coach conflicts
-    if (scheduleType === 'individual' && existing.scheduleType === 'individual') {
+    if (scheduleType === 'private' && existing.scheduleType === 'private') {
       if (existing.coachId?.toString() === coachId?.toString()) {
         conflicts.push({
           existingSchedule: existing._id,
@@ -522,7 +520,7 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
           details: `Coach conflict: ${existing.coachName} already scheduled`
         });
       }
-    } else if (scheduleType === 'individual' && existing.scheduleType === 'group') {
+    } else if (scheduleType === 'private' && existing.scheduleType === 'group') {
       const hasCoach = existing.coaches.some(c => c._id?.toString() === coachId?.toString());
       if (hasCoach) {
         conflicts.push({
@@ -531,13 +529,13 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
           details: `Coach conflict: ${existing.coachName} already in group class`
         });
       }
-    } else if (scheduleType === 'group' && existing.scheduleType === 'individual') {
+    } else if (scheduleType === 'group' && existing.scheduleType === 'private') {
       const hasCoach = coaches.some(c => c.toString() === existing.coachId?.toString());
       if (hasCoach) {
         conflicts.push({
           existingSchedule: existing._id,
           conflictType: 'coach',
-          details: `Coach conflict with existing individual schedule`
+          details: `Coach conflict with existing private schedule`
         });
       }
     } else if (scheduleType === 'group' && existing.scheduleType === 'group') {
@@ -553,8 +551,8 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
       }
     }
 
-    // ✅ Check student conflicts (individual only)
-    if (scheduleType === 'individual' && existing.scheduleType === 'individual') {
+    // ✅ Check student conflicts (private only)
+    if (scheduleType === 'private' && existing.scheduleType === 'private') {
       if (existing.studentId?.toString() === studentId?.toString()) {
         conflicts.push({
           existingSchedule: existing._id,
@@ -562,7 +560,7 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
           details: `Student conflict: ${existing.studentName} already scheduled`
         });
       }
-    } else if (scheduleType === 'individual' && existing.scheduleType === 'group') {
+    } else if (scheduleType === 'private' && existing.scheduleType === 'group') {
       const hasStudent = existing.students.some(s => s._id?.toString() === studentId?.toString());
       if (hasStudent) {
         conflicts.push({
@@ -603,7 +601,7 @@ scheduleSchema.statics.getPendingReminders = async function(hoursBuffer = 24) {
 scheduleSchema.statics.getByCoach = async function(coachId, startDate, endDate) {
   return await this.find({
     $or: [
-      { coachId: coachId, scheduleType: 'individual' },
+      { coachId: coachId, scheduleType: 'private' },
       { 'coaches._id': coachId, scheduleType: 'group' }
     ],
     date: {
@@ -619,7 +617,7 @@ scheduleSchema.statics.getByCoach = async function(coachId, startDate, endDate) 
 scheduleSchema.statics.getByStudent = async function(studentId, startDate, endDate) {
   return await this.find({
     $or: [
-      { studentId: studentId, scheduleType: 'individual' },
+      { studentId: studentId, scheduleType: 'private' },
       { 'students._id': studentId, scheduleType: 'group' }
     ],
     date: {
@@ -643,11 +641,11 @@ scheduleSchema.statics.getGroupSchedules = async function(startDate, endDate) {
 };
 
 /**
- * ✅ Get individual schedules
+ * ✅ Get private schedules
  */
 scheduleSchema.statics.getIndividualSchedules = async function(startDate, endDate) {
   return await this.find({
-    scheduleType: 'individual',
+    scheduleType: 'private',
     date: {
       $gte: new Date(startDate),
       $lte: new Date(endDate)
@@ -701,7 +699,7 @@ scheduleSchema.statics.getArchiveStats = async function() {
   });
 
   const groupCount = await this.countDocuments({ scheduleType: 'group' });
-  const individualCount = await this.countDocuments({ scheduleType: 'individual' });
+  const individualCount = await this.countDocuments({ scheduleType: 'private' });
 
   return {
     totalArchived: total,
@@ -710,7 +708,7 @@ scheduleSchema.statics.getArchiveStats = async function() {
     breakdown: {
       totalSchedules: total + groupCount + individualCount,
       group: groupCount,
-      individual: individualCount,
+      private: individualCount,
       archived: total
     }
   };

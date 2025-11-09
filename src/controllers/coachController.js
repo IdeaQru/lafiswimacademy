@@ -122,7 +122,7 @@ exports.getAllCoachesSimple = async (req, res) => {
     console.log('📋 Getting all coaches (simple)');
 
     const coaches = await Coach.find({ status: 'Aktif' })
-      .select('_id coachId fullName email phone specialization photo')
+      .select('_id coachId fullName email phone status photo')
       .sort({ fullName: 1 })
       .lean();
 

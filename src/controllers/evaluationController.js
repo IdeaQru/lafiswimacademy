@@ -1,4 +1,4 @@
-// backend/src/controllers/evaluationController.js - COMPLETE FINAL VERSION
+// backend/src/controllers/evaluationController.js - COMPLETE FIXED VERSION
 
 const mongoose = require('mongoose');
 const TrainingEvaluation = require('../models/TrainingEvaluation');
@@ -12,9 +12,7 @@ const Coach = require('../models/Coach');
 
 /**
  * POST /api/evaluations/bulk
- * ✅ COMPLETE: Handle BOTH PRIVATE & GROUP
- * - Private: 1 coach
- * - Group: multiple coaches
+ * ✅ COMPLETE: Handle PRIVATE, SEMI PRIVATE & GROUP
  */
 exports.bulkCreateEvaluation = async (req, res) => {
   try {
@@ -55,21 +53,30 @@ exports.bulkCreateEvaluation = async (req, res) => {
     console.log(`✅ Schedule found: ${schedule._id}`);
     console.log(`   Type: ${schedule.scheduleType}`);
 
-    // ==================== DETERMINE COACH ARRAY ====================
+    // ==================== DETERMINE COACH ARRAY - FIXED: 3 TYPES ====================
     let scheduleCoachIds = [];
     let allCoachObjectData = [];
 
     if (schedule.scheduleType === 'private') {
+      // ✅ PRIVATE: 1 coach
       if (schedule.coachId) {
         scheduleCoachIds = [schedule.coachId._id];
         allCoachObjectData = [schedule.coachId];
-        console.log(`   👨‍🏫 PRIVATE: Coach = ${schedule.coachId.fullName}`);
+        console.log(`   👤 PRIVATE: Coach = ${schedule.coachId.fullName}`);
       }
-    } else if (schedule.scheduleType === 'group') {
+    } else if (schedule.scheduleType === 'semiPrivate') {
+      // ✅ SEMI PRIVATE: multiple coaches
       if (schedule.coaches && schedule.coaches.length > 0) {
         scheduleCoachIds = schedule.coaches.map(c => c._id);
         allCoachObjectData = schedule.coaches;
-        console.log(`   👥 GROUP: ${schedule.coaches.length} coaches`);
+        console.log(`   👥 SEMI PRIVATE: ${schedule.coaches.length} coaches`);
+      }
+    } else if (schedule.scheduleType === 'group') {
+      // ✅ GROUP: multiple coaches
+      if (schedule.coaches && schedule.coaches.length > 0) {
+        scheduleCoachIds = schedule.coaches.map(c => c._id);
+        allCoachObjectData = schedule.coaches;
+        console.log(`   👨‍👩‍👧‍👦 GROUP: ${schedule.coaches.length} coaches`);
       }
     }
 
@@ -268,10 +275,13 @@ exports.getEvaluationsBySchedule = async (req, res) => {
       });
     }
 
-    // ==================== PERMISSION CHECK ====================
+    // ==================== PERMISSION CHECK - FIXED: 3 TYPES ====================
     let scheduleCoachIds = [];
+    
     if (schedule.scheduleType === 'private' && schedule.coachId) {
       scheduleCoachIds = [schedule.coachId._id];
+    } else if (schedule.scheduleType === 'semiPrivate' && schedule.coaches) {
+      scheduleCoachIds = schedule.coaches.map(c => c._id);
     } else if (schedule.scheduleType === 'group' && schedule.coaches) {
       scheduleCoachIds = schedule.coaches.map(c => c._id);
     }
@@ -343,7 +353,7 @@ exports.getEvaluationsBySchedule = async (req, res) => {
 
 /**
  * GET /api/evaluations/coach-report
- * ✅ COMPLETE: Handle BOTH PRIVATE & GROUP
+ * ✅ COMPLETE: Handle PRIVATE, SEMI PRIVATE & GROUP
  */
 exports.getCoachReport = async (req, res) => {
   try {
@@ -373,9 +383,11 @@ exports.getCoachReport = async (req, res) => {
       }
     }
 
+    // ✅ FIXED: Filter untuk 3 tipe schedule
     if (coachObjectId) {
       scheduleFilter.$or = [
         { coachId: coachObjectId, scheduleType: 'private' },
+        { 'coaches._id': coachObjectId, scheduleType: 'semiPrivate' },
         { 'coaches._id': coachObjectId, scheduleType: 'group' }
       ];
     }
@@ -392,7 +404,7 @@ exports.getCoachReport = async (req, res) => {
 
     console.log(`✅ Found ${schedules.length} schedules`);
 
-    // ==================== NORMALIZE STUDENTS ====================
+    // ==================== NORMALIZE STUDENTS - FIXED: 3 TYPES ====================
     const normalizedSchedules = schedules.map(schedule => {
       let students = [];
 
@@ -416,8 +428,18 @@ exports.getCoachReport = async (req, res) => {
             classLevel: s.classLevel || ''
           }];
         }
+      } else if (schedule.scheduleType === 'semiPrivate') {
+        // ✅ SEMI PRIVATE dengan students array
+        if (Array.isArray(schedule.students)) {
+          students = schedule.students.map(s => ({
+            _id: s._id.toString(),
+            studentId: s.studentId || s._id.toString(),
+            fullName: s.fullName,
+            classLevel: s.classLevel || ''
+          }));
+        }
       } else if (schedule.scheduleType === 'group') {
-        // Group dengan students array
+        // ✅ GROUP dengan students array
         if (Array.isArray(schedule.students)) {
           students = schedule.students.map(s => ({
             _id: s._id.toString(),
@@ -473,7 +495,7 @@ exports.getCoachReport = async (req, res) => {
       });
     });
 
-    // ==================== BUILD COACH MAP ====================
+    // ==================== BUILD COACH MAP - FIXED: 3 TYPES ====================
     const coachMap = {};
     
     normalizedSchedules.forEach((schedule) => {
@@ -482,6 +504,9 @@ exports.getCoachReport = async (req, res) => {
       if (schedule.scheduleType === 'private' && schedule.coachId) {
         coachsForThisSchedule = [schedule.coachId];
       } 
+      else if (schedule.scheduleType === 'semiPrivate' && Array.isArray(schedule.coaches)) {
+        coachsForThisSchedule = schedule.coaches;
+      }
       else if (schedule.scheduleType === 'group' && Array.isArray(schedule.coaches)) {
         coachsForThisSchedule = schedule.coaches;
       }
@@ -525,7 +550,7 @@ exports.getCoachReport = async (req, res) => {
 
         coachMap[coachKey].sessions.push({
           scheduleId: schedule._id.toString(),
-          scheduleType: schedule.scheduleType,
+          scheduleType: schedule.scheduleType, // ✅ Preserve scheduleType (private/semiPrivate/group)
           groupName: schedule.groupName || '',
           program: schedule.program || 'Unknown',
           programCategory: schedule.programCategory || 'General',
@@ -619,7 +644,7 @@ exports.getStudentHistory = async (req, res) => {
 
     const evaluations = await TrainingEvaluation.find(filter)
       .populate('coachIds', 'coachId fullName')
-      .populate('scheduleId', 'location startTime endTime program')
+      .populate('scheduleId', 'location startTime endTime program scheduleType')
       .sort({ trainingDate: -1 })
       .limit(parseInt(limit))
       .lean();
@@ -650,7 +675,8 @@ exports.getStudentHistory = async (req, res) => {
           attendance: e.attendance,
           notes: e.notes,
           coachNotesHistory: e.coachNotes || [],
-          location: e.scheduleId?.location || '-'
+          location: e.scheduleId?.location || '-',
+          scheduleType: e.scheduleId?.scheduleType || 'unknown'
         }))
       }
     });

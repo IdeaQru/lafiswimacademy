@@ -514,7 +514,7 @@ exports.createSchedule = async (req, res) => {
 
     const scheduleType = req.body.scheduleType || 'private';
 
-    if (!['private', 'group'].includes(scheduleType)) {
+    if (!['private', 'group' ,'semiPrivate'].includes(scheduleType)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid schedule type. Must be private or group'

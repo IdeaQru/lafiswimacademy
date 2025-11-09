@@ -1,5 +1,4 @@
-
-
+// backend/src/helpers/reportHelper.js - COMPLETE FIXED VERSION
 
 const mongoose = require('mongoose');
 const Schedule = require('../models/Schedule');
@@ -10,13 +9,12 @@ const Payment = require('../models/Payment');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 
-
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ HELPER 1: GET STUDENT EXPORT DATA
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
 /**
- * ✅ Get student export data
+ * ✅ Get student export data - FIXED: Support 3 schedule types
  */
 async function getStudentExportData(studentId, startDate, endDate) {
   try {
@@ -37,7 +35,7 @@ async function getStudentExportData(studentId, startDate, endDate) {
     }
 
     const evaluations = await TrainingEvaluation.find(evalFilter)
-      .populate('coachIds', '_id coachId fullName specialization')
+      .populate('coachIds', '_id coachId fullName')
       .populate('scheduleId', 'startTime endTime location program scheduleType programCategory')
       .sort({ trainingDate: -1 })
       .lean();
@@ -64,30 +62,17 @@ async function getStudentExportData(studentId, startDate, endDate) {
   }
 }
 
-
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
-// ✅ HELPER 2: GET COACH EXPORT DATA - FIXED VERSION
+// ✅ HELPER 2: GET COACH EXPORT DATA - COMPLETE FIXED
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
 /**
- * ✅ Get coach export data - FIXED
- * 
- * SISTEM:
- * - Coach role: OTOMATIS filter diri sendiri (coachId dari Coach collection)
- * - Admin role: Bisa lihat semua atau filter specific coach
- * - Hanya ambil coach PERTAMA dari GROUP
- * - coachId HANYA dari Coach collection (bukan evaluation)
- */
-// backend/src/helpers/reportHelper.js - COMPLETE FIX
-
-/**
- * ✅ Get coach export data
- * FIXED: Ambil coach data dari Coaches collection (bukan dari populate Schedule)
+ * ✅ Get coach export data - FIXED: Support 3 schedule types
  */
 async function getCoachExportData(startDate, endDate, coachId = null, userRole = 'admin', userCoachId = null) {
   try {
     console.log('\n' + '='.repeat(100));
-    console.log('📊 Get coach export data - FIXED: Ambil dari Coaches collection');
+    console.log('📊 Get coach export data - FIXED: 3 schedule types support');
     console.log('='.repeat(100));
     console.log('   User:', { role: userRole, coachId: userCoachId });
     console.log('   Params:', { startDate, endDate, coachId });
@@ -123,7 +108,7 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
       throw new Error('Coach tidak ditemukan');
     }
 
-    // ==================== FETCH SCHEDULES ====================
+    // ==================== FETCH SCHEDULES - FIXED: 3 TYPES ====================
     console.log('\n📅 Fetching schedules...');
 
     const scheduleFilter2 = { ...scheduleFilter };
@@ -131,6 +116,7 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
     if (coachObjectId) {
       scheduleFilter2.$or = [
         { coachId: coachObjectId, scheduleType: 'private' },
+        { 'coaches._id': coachObjectId, scheduleType: 'semiPrivate' },
         { 'coaches._id': coachObjectId, scheduleType: 'group' }
       ];
     }
@@ -151,7 +137,7 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
       return { coaches: [] };
     }
 
-    // ==================== NORMALIZE SCHEDULES ====================
+    // ==================== NORMALIZE SCHEDULES - FIXED: 3 TYPES ====================
     console.log('\n📊 Normalizing schedules...');
 
     const normalizedSchedules = schedules.map((schedule) => {
@@ -159,6 +145,7 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
       let mainCoachId = null;
 
       if (schedule.scheduleType === 'private') {
+        // ✅ PRIVATE
         if (Array.isArray(schedule.students) && schedule.students.length > 0) {
           students = schedule.students.map(s => ({
             _id: s._id.toString(),
@@ -173,19 +160,18 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
           }];
         }
         
-        // ✅ PRIVATE: Ambil coachId dari schedule.coachId
         if (schedule.coachId) {
           mainCoachId = schedule.coachId._id.toString();
         }
       }
-      else if (schedule.scheduleType === 'group') {
+      else if (schedule.scheduleType === 'semiPrivate') {
+        // ✅ SEMI PRIVATE
         students = (schedule.students || []).map(s => ({
           _id: s._id.toString(),
           studentId: s.studentId,
           fullName: s.fullName,
         }));
 
-        // ✅ GROUP: Cari coach yang match dengan userCoachId
         if (Array.isArray(schedule.coaches) && schedule.coaches.length > 0) {
           if (userCoachId) {
             const userCoachObjectId = new mongoose.Types.ObjectId(userCoachId);
@@ -196,7 +182,32 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
             
             if (matchedCoach) {
               mainCoachId = matchedCoach._id.toString();
-              console.log(`   📌 GROUP: Matched coach - ${mainCoachId}`);
+            } else {
+              mainCoachId = schedule.coaches[0]._id.toString();
+            }
+          } else {
+            mainCoachId = schedule.coaches[0]._id.toString();
+          }
+        }
+      }
+      else if (schedule.scheduleType === 'group') {
+        // ✅ GROUP
+        students = (schedule.students || []).map(s => ({
+          _id: s._id.toString(),
+          studentId: s.studentId,
+          fullName: s.fullName,
+        }));
+
+        if (Array.isArray(schedule.coaches) && schedule.coaches.length > 0) {
+          if (userCoachId) {
+            const userCoachObjectId = new mongoose.Types.ObjectId(userCoachId);
+            const matchedCoach = schedule.coaches.find(c => {
+              const cId = c._id?.toString?.() || c._id.toString();
+              return cId === userCoachObjectId.toString();
+            });
+            
+            if (matchedCoach) {
+              mainCoachId = matchedCoach._id.toString();
             } else {
               mainCoachId = schedule.coaches[0]._id.toString();
             }
@@ -371,10 +382,6 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
   }
 }
 
-
-
-
-
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ HELPER 3: GET FINANCIAL EXPORT DATA
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
@@ -427,7 +434,6 @@ async function getFinancialExportData(startDate, endDate) {
     throw error;
   }
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ PDF EXPORT
@@ -484,7 +490,6 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
   }
 }
 
-
 // ==================== PDF RENDER: STUDENT ====================
 async function renderStudentPDF(doc, data) {
   let y = 125;
@@ -535,8 +540,7 @@ async function renderStudentPDF(doc, data) {
   });
 }
 
-
-// ==================== PDF RENDER: COACH ====================
+// ==================== PDF RENDER: COACH - REMOVED SPECIALIZATION ====================
 async function renderCoachPDF(doc, coaches) {
   let y = 125;
 
@@ -546,16 +550,15 @@ async function renderCoachPDF(doc, coaches) {
       y = 50;
     }
 
-    // Coach Header
-    doc.roundedRect(50, y, doc.page.width - 100, 40, 5)
+    // ✅ Coach Header - REMOVED specialization
+    doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
       .fillAndStroke('#f0fdf4', '#10b981');
     doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold')
       .text(`${coach.name} (${coach.id})`, 70, y + 8);
     doc.fontSize(8).fillColor('#6b7280').font('Helvetica')
-      .text(`Spesialisasi: ${coach.specialization}`, 70, y + 25)
-      .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 25);
+      .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 18);
 
-    y += 50;
+    y += 45;
 
     // Schedule Type Stats
     if (coach.scheduleTypeStats.length > 0) {
@@ -662,7 +665,6 @@ async function renderCoachPDF(doc, coaches) {
   });
 }
 
-
 // ==================== PDF RENDER: FINANCIAL ====================
 async function renderFinancialPDF(doc, data) {
   let y = 125;
@@ -707,7 +709,6 @@ async function renderFinancialPDF(doc, data) {
     y += 12;
   });
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ EXCEL EXPORT
@@ -881,7 +882,6 @@ async function exportToExcelBeautiful(res, title, data, reportType) {
     }
   }
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // 📋 MODULE EXPORTS
