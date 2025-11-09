@@ -13,7 +13,7 @@ export default {
     "chunk-LKTXU4ZY.js"
   ],
   "src/app/pages/sidebar/schedule/schedule.ts": [
-    "chunk-HNII5QMJ.js",
+    "chunk-NYTOHLH3.js",
     "chunk-C2UT65CU.js",
     "chunk-YSFBRVRA.js",
     "chunk-65JJV7WV.js",
@@ -66,8 +66,8 @@ export default {
   ]
 },
   assets: {
-    'index.csr.html': {size: 32892, hash: '00192cada817059633cd2a2dcf8e91a964edbb3ac476d58f8686503376c50783', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
-    'index.server.html': {size: 24621, hash: '3e794f8128f8590a61405b72a1e7f453dd924c144c1df3c4fb09aab9004867b7', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
+    'index.csr.html': {size: 32892, hash: 'ffae1b9fb20e250f785c097c85068b7e9eea9f1fb7cf442f34cbd468f1c418ef', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
+    'index.server.html': {size: 24621, hash: 'ebe53ac826dd92c237f497793396361c6b6e3fcd2ac64c5d551920aa057e048d', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
     'styles-5IICDY77.css': {size: 10151, hash: 'bgIYC/G4a7E', text: () => import('./assets-chunks/styles-5IICDY77_css.mjs').then(m => m.default)}
   },
 };
