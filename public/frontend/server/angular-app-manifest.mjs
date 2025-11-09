@@ -13,10 +13,10 @@ export default {
     "chunk-GYJS2I37.js"
   ],
   "src/app/pages/sidebar/schedule/schedule.ts": [
-    "chunk-W236YJJW.js",
+    "chunk-5MSDAXSP.js",
     "chunk-DPBYUBLZ.js",
     "chunk-IGAGJ5Y5.js",
-    "chunk-L4VYE3NA.js",
+    "chunk-T3MBPB64.js",
     "chunk-GYJS2I37.js"
   ],
   "src/app/pages/sidebar/reports/reports.ts": [
@@ -24,9 +24,9 @@ export default {
     "chunk-GYJS2I37.js"
   ],
   "src/app/pages/home/home.ts": [
-    "chunk-PQL2FYRD.js",
+    "chunk-CMXHFP67.js",
     "chunk-7X3RFNOR.js",
-    "chunk-L4VYE3NA.js",
+    "chunk-T3MBPB64.js",
     "chunk-GYJS2I37.js"
   ],
   "src/app/pages/login/login.ts": [
@@ -47,8 +47,8 @@ export default {
     "chunk-24YCW2YZ.js"
   ],
   "src/app/pages/sidebar/user-configuration/user-configuration.ts": [
-    "chunk-AJA73W7G.js",
-    "chunk-L4VYE3NA.js",
+    "chunk-L7FTUCZ5.js",
+    "chunk-T3MBPB64.js",
     "chunk-GYJS2I37.js"
   ],
   "src/app/pages/sidebar/students/students.ts": [
@@ -57,15 +57,15 @@ export default {
     "chunk-GYJS2I37.js"
   ],
   "src/app/pages/sidebar/coaches/coaches.ts": [
-    "chunk-JVWLQTWW.js",
+    "chunk-ZHR2ONQN.js",
     "chunk-IGAGJ5Y5.js",
-    "chunk-L4VYE3NA.js",
+    "chunk-T3MBPB64.js",
     "chunk-GYJS2I37.js"
   ]
 },
   assets: {
-    'index.csr.html': {size: 8921, hash: 'a98c487a9865f1713356e03fc0ef2e4d38dec99177a233406aa52bd371ee62d9', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
-    'index.server.html': {size: 8584, hash: '5750a43f557e4f461cb24252d4b889b26927a7a7735f1b87e078420fb5182a52', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
+    'index.csr.html': {size: 8921, hash: '03efba127116c16c06c9ca4a519a8b6ebe91d0635f2d5ca068ea21970320b3b6', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
+    'index.server.html': {size: 8584, hash: 'a5d73d1558296b11d5b981c58a515302ec9933dd2224aa7bfd7ad66b28378ac8', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
     'styles-Q63L6MFV.css': {size: 2052, hash: 'lKpZgfq6xJc', text: () => import('./assets-chunks/styles-Q63L6MFV_css.mjs').then(m => m.default)}
   },
 };
