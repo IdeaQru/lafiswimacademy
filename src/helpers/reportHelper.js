@@ -69,10 +69,15 @@ async function getStudentExportData(studentId, startDate, endDate) {
 /**
  * ✅ Get coach export data - FIXED: Support 3 schedule types
  */
+/**
+ * ✅ GET COACH EXPORT DATA - COMPLETE WITH ATTENDANCE-BASED LOGIC
+ * Support: Private, Semi Private, Group schedules
+ * Logic: Completed/Cancelled based on student attendance
+ */
 async function getCoachExportData(startDate, endDate, coachId = null, userRole = 'admin', userCoachId = null) {
   try {
     console.log('\n' + '='.repeat(100));
-    console.log('📊 Get coach export data - FIXED: 3 schedule types support');
+    console.log('📊 Get coach export data - FIXED: 3 schedule types + Attendance Logic');
     console.log('='.repeat(100));
     console.log('   User:', { role: userRole, coachId: userCoachId });
     console.log('   Params:', { startDate, endDate, coachId });
@@ -263,6 +268,8 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
     console.log(`✅ Found ${evaluations.length} evaluations`);
 
     // ==================== BUILD EVALUATION MAP ====================
+    console.log('\n🗂️ Building evaluation map...');
+    
     const evaluationMap = {};
     evaluations.forEach(ev => {
       const scheduleId = ev.scheduleId.toString();
@@ -279,8 +286,10 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
       });
     });
 
-    // ==================== BUILD COACH MAP ====================
-    console.log('\n👥 Building coach map...');
+    console.log(`✅ Evaluation map built: ${Object.keys(evaluationMap).length} schedules with evaluations`);
+
+    // ==================== BUILD COACH MAP - ATTENDANCE-BASED ====================
+    console.log('\n👥 Building coach map with attendance logic...');
 
     const coachMap = {};
     
@@ -325,14 +334,76 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
       }
       
       coachMap[coachKey].scheduleTypeStats[typeKey].total++;
+
+      // ✅ GET EVALUATIONS FOR THIS SCHEDULE
+      const scheduleId = schedule._id.toString();
+      const sessionEvaluations = evaluationMap[scheduleId] || [];
       
-      if (schedule.status === 'completed') {
-        coachMap[coachKey].scheduleTypeStats[typeKey].completed++;
-      } else if (schedule.status === 'cancelled') {
+      console.log(`\n   📋 Schedule ${scheduleId}:`);
+      console.log(`      Type: ${scheduleType} (${programCategory})`);
+      console.log(`      Status: ${schedule.status}`);
+      console.log(`      Date: ${schedule.date}`);
+      console.log(`      Evaluations: ${sessionEvaluations.length}`);
+
+      // ✅ CHECK ATTENDANCE STATUS
+      let hasHadir = false;
+      let hasCancelled = false;
+
+      sessionEvaluations.forEach(ev => {
+        const attendance = (ev.attendance || '').toLowerCase().trim();
+        
+        console.log(`      → Student: ${ev.studentName} | Attendance: "${ev.attendance}" → normalized: "${attendance}"`);
+        
+        if (attendance === 'hadir') {
+          hasHadir = true;
+        } else if (attendance === 'sakit' || attendance === 'izin' || attendance === 'tidak hadir') {
+          hasCancelled = true;
+        }
+      });
+
+      console.log(`      → Analysis: hasHadir=${hasHadir}, hasCancelled=${hasCancelled}`);
+
+      // ✅ ATTENDANCE-BASED COUNTING LOGIC
+      let resultStatus = '';
+
+      if (schedule.status === 'cancelled' || schedule.status === 'rescheduled') {
+        // 1. Schedule cancelled by system
         coachMap[coachKey].scheduleTypeStats[typeKey].cancelled++;
+        resultStatus = 'CANCELLED (schedule status)';
+      } 
+      else if (new Date(schedule.date) > new Date()) {
+        // 2. Future schedule - skip counting (don't count as completed or cancelled)
+        resultStatus = 'UPCOMING (future - skip count)';
+      }
+      else if (sessionEvaluations.length === 0) {
+        // 3. No evaluation yet - default cancelled
+        coachMap[coachKey].scheduleTypeStats[typeKey].cancelled++;
+        resultStatus = 'CANCELLED (no evaluation)';
+      }
+      else if (hasHadir) {
+        // 4. At least one student present - COMPLETED
+        coachMap[coachKey].scheduleTypeStats[typeKey].completed++;
+        resultStatus = 'COMPLETED (has attendance)';
+      } 
+      else if (hasCancelled) {
+        // 5. All students absent (sakit/izin/tidak hadir) - CANCELLED
+        coachMap[coachKey].scheduleTypeStats[typeKey].cancelled++;
+        resultStatus = 'CANCELLED (all absent)';
+      }
+      else {
+        // 6. Fallback to schedule status
+        if (schedule.status === 'completed') {
+          coachMap[coachKey].scheduleTypeStats[typeKey].completed++;
+          resultStatus = 'COMPLETED (fallback)';
+        } else {
+          coachMap[coachKey].scheduleTypeStats[typeKey].cancelled++;
+          resultStatus = 'CANCELLED (fallback)';
+        }
       }
 
-      const sessionEvaluations = evaluationMap[schedule._id.toString()] || [];
+      console.log(`      ✅ RESULT: ${resultStatus}`);
+      console.log(`      → Stats: Total=${coachMap[coachKey].scheduleTypeStats[typeKey].total}, Completed=${coachMap[coachKey].scheduleTypeStats[typeKey].completed}, Cancelled=${coachMap[coachKey].scheduleTypeStats[typeKey].cancelled}`);
+
       const students = schedule.students || [];
 
       coachMap[coachKey].sessions.push({
@@ -353,6 +424,16 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
     });
 
     console.log(`✅ ${Object.keys(coachMap).length} unique coaches processed`);
+
+    // ✅ FINAL STATS FOR DEBUGGING
+    console.log('\n📊 FINAL COACH STATISTICS:');
+    Object.values(coachMap).forEach(coach => {
+      console.log(`\n${coach.name} (${coach.coachId}):`);
+      Object.entries(coach.scheduleTypeStats).forEach(([typeKey, stat]) => {
+        console.log(`  ${typeKey}:`);
+        console.log(`    Total: ${stat.total}, Completed: ${stat.completed}, Cancelled: ${stat.cancelled}`);
+      });
+    });
 
     // ==================== FORMAT RESPONSE ====================
     const coaches = Object.values(coachMap).map(coach => ({
@@ -381,6 +462,7 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
     throw error;
   }
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ HELPER 3: GET FINANCIAL EXPORT DATA
@@ -509,7 +591,6 @@ async function renderStudentPDF(doc, data) {
     .text('Tanggal', 60, y + 4, { width: 40 })
     .text('Waktu', 105, y + 4, { width: 35 })
     .text('Tipe', 145, y + 4, { width: 30 })
-    .text('Kategori', 180, y + 4, { width: 35 })
     .text('Program', 220, y + 4, { width: 40 })
     .text('Pelatih', 265, y + 4, { width: 60 })
     .text('Kehadiran', 330, y + 4, { width: 35 })
@@ -530,7 +611,6 @@ async function renderStudentPDF(doc, data) {
       .text(new Date(item.date).toLocaleDateString('id-ID'), 60, y + 2, { width: 40 })
       .text(item.time, 105, y + 2, { width: 35 })
       .text(item.scheduleType || '-', 145, y + 2, { width: 30 })
-      .text(item.programCategory, 180, y + 2, { width: 35 })
       .text(item.program, 220, y + 2, { width: 40 })
       .text(item.coachNames, 265, y + 2, { width: 60 })
       .text(item.attendance, 330, y + 2, { width: 35 })
@@ -541,16 +621,16 @@ async function renderStudentPDF(doc, data) {
 }
 
 // ==================== PDF RENDER: COACH - REMOVED SPECIALIZATION ====================
+// ==================== PDF RENDER: COACH - FIXED ENCODING ====================
 async function renderCoachPDF(doc, coaches) {
   let y = 125;
-
   coaches.forEach(coach => {
     if (y > doc.page.height - 150) {
       doc.addPage();
       y = 50;
     }
 
-    // ✅ Coach Header - REMOVED specialization
+    // ✅ Coach Header - NO EMOJI
     doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
       .fillAndStroke('#f0fdf4', '#10b981');
     doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold')
@@ -560,10 +640,10 @@ async function renderCoachPDF(doc, coaches) {
 
     y += 45;
 
-    // Schedule Type Stats
+    // ✅ Schedule Type Stats - NO EMOJI
     if (coach.scheduleTypeStats.length > 0) {
       doc.fontSize(8).fillColor('#10b981').font('Helvetica-Bold')
-        .text('📂 Statistik Schedule Type:', 60, y);
+        .text('STATISTIK SCHEDULE TYPE:', 60, y); // ✅ NO EMOJI
       y += 12;
 
       doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981');
@@ -576,6 +656,7 @@ async function renderCoachPDF(doc, coaches) {
       y += 16;
 
       coach.scheduleTypeStats.forEach((stat, i) => {
+        console.log(stat);
         const bgColor = i % 2 === 0 ? '#f0fdf4' : '#ffffff';
         doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
 
@@ -591,10 +672,10 @@ async function renderCoachPDF(doc, coaches) {
       y += 8;
     }
 
-    // Sessions
+    // ✅ Sessions - NO EMOJI
     if (coach.sessions.length > 0) {
       doc.fontSize(8).fillColor('#0369a1').font('Helvetica-Bold')
-        .text('📋 Daftar Sesi & Evaluasi Siswa:', 60, y);
+        .text('DAFTAR SESI & EVALUASI SISWA:', 60, y); // ✅ NO EMOJI
       y += 12;
 
       coach.sessions.forEach(session => {
@@ -664,6 +745,7 @@ async function renderCoachPDF(doc, coaches) {
     y += 10;
   });
 }
+
 
 // ==================== PDF RENDER: FINANCIAL ====================
 async function renderFinancialPDF(doc, data) {

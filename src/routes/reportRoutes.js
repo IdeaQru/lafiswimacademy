@@ -9,14 +9,20 @@ const {
   getCoachReport,
   getFinancialReport,
   exportReport,
-  getStudentsListWithStats
+  getStudentsListWithStats,
+  generateAndSendStudentPDFToWhatsApp
 } = require('../controllers/reportController');
 
 // ✅ Apply protect middleware ke SEMUA routes
 router.use(protect);
 
 console.log('✅ [REPORT ROUTES] Protect middleware applied to all routes');
-
+router.post(
+  '/student/:id/send-whatsapp', 
+  protect, 
+  authorize('admin'),  // Only admin & instructor can send
+  generateAndSendStudentPDFToWhatsApp
+);
 // ==================== STUDENT REPORTS ====================
 router.get('/students/search', searchStudentsForReport);
 router.get('/student/:studentId', getStudentIndividualReport);

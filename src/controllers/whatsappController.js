@@ -1,5 +1,7 @@
 const whatsappService = require('../services/whatsappService');
 const Message = require('../models/Message');
+// backend/src/controllers/whatsappController.js
+
 
 /**
  * @desc    Get WhatsApp connection status
@@ -23,7 +25,7 @@ exports.getStatus = (req, res) => {
 };
 
 /**
- * @desc    Connect WhatsApp
+ * @desc    Connect WhatsApp (WABLAS specific)
  * @route   POST /api/whatsapp/connect
  * @access  Private (Admin only)
  */
@@ -32,16 +34,20 @@ exports.connect = async (req, res) => {
     if (whatsappService.status === 'connected') {
       return res.json({
         success: true,
-        message: 'WhatsApp already connected',
+        message: 'WhatsApp already connected via WABLAS',
         data: whatsappService.getStatus(),
       });
     }
 
     await whatsappService.initialize();
     
+    const isConnected = whatsappService.status === 'connected';
+    
     res.json({
-      success: true,
-      message: 'WhatsApp connection initiated. Please scan QR code.',
+      success: isConnected,
+      message: isConnected 
+        ? 'WABLAS connected successfully' 
+        : `Please scan QR code at: https://${process.env.WABLAS_SERVER}/dashboard`,
       data: whatsappService.getStatus(),
     });
   } catch (error) {
@@ -54,7 +60,7 @@ exports.connect = async (req, res) => {
 };
 
 /**
- * @desc    Disconnect WhatsApp
+ * @desc    Disconnect WhatsApp (WABLAS specific)
  * @route   POST /api/whatsapp/disconnect
  * @access  Private (Admin only)
  */
@@ -64,7 +70,9 @@ exports.disconnect = async (req, res) => {
     
     res.json({
       success: true,
-      message: 'WhatsApp disconnected successfully',
+      message: 'WABLAS service disconnected locally',
+      note: 'Device remains linked in WABLAS dashboard. To fully disconnect, unlink from dashboard.',
+      data: whatsappService.getStatus()
     });
   } catch (error) {
     console.error('Disconnect error:', error);
@@ -74,35 +82,44 @@ exports.disconnect = async (req, res) => {
     });
   }
 };
+
 /**
- * @desc    Clear session and force new QR
+ * @desc    Clear session (Not applicable for WABLAS)
  * @route   POST /api/whatsapp/clear-session
  * @access  Public
  */
 exports.clearSession = async (req, res) => {
   try {
+    if (process.env.WA_PROVIDER === 'wablas') {
+      return res.status(400).json({
+        success: false,
+        message: 'Clear session not applicable for WABLAS',
+        data: {
+          provider: 'wablas',
+          solution: 'To reset connection: Login to WABLAS dashboard → Unlink device → Scan QR again',
+          dashboard: `https://${process.env.WABLAS_SERVER}/dashboard`
+        }
+      });
+    }
+
+    // Baileys fallback (if ever needed)
     const fs = require('fs');
     const path = require('path');
     
-    // Disconnect first
     await whatsappService.disconnect();
     
-    // Delete session files
     const sessionPath = path.join(__dirname, '../../sessions/lafi');
     if (fs.existsSync(sessionPath)) {
       fs.rmSync(sessionPath, { recursive: true, force: true });
       console.log('🗑️  Session files deleted');
     }
     
-    // Wait 1 second
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Reconnect
     await whatsappService.initialize();
     
     res.json({
       success: true,
-      message: 'Session cleared. Scan new QR code.',
+      message: 'Session cleared successfully',
     });
   } catch (error) {
     console.error('Clear session error:', error);
@@ -113,11 +130,7 @@ exports.clearSession = async (req, res) => {
   }
 };
 
-/**
- * @desc    Send single message
- * @route   POST /api/whatsapp/send
- * @access  Private
- */
+
 exports.sendMessage = async (req, res) => {
   try {
     const { to, message, type, metadata } = req.body;

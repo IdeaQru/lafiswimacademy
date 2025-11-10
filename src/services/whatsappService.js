@@ -1,9 +1,4 @@
-const { 
-  default: makeWASocket, 
-  DisconnectReason, 
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion 
-} = require('@whiskeysockets/baileys');
+
 const pino = require('pino');
 const qrcode = require('qrcode');
 const Message = require('../models/Message');
@@ -416,6 +411,13 @@ class WhatsAppService {
 }
 
 // Create singleton instance
-const whatsappService = new WhatsAppService();
+// backend/src/services/whatsappService.js
 
+const WhatsAppFactory = require('./gateway/WhatsAppFactory');
+
+// ✅ Create instance based on env
+const whatsappService = WhatsAppFactory.create();
+
+// ✅ Export singleton (could be WABLAS or Baileys)
 module.exports = whatsappService;
+

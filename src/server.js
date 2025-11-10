@@ -9,7 +9,6 @@ const whatsappService = require('./services/whatsappService');
 
 // Import cron jobs
 const { reminder24Hours, reminder1Hour } = require('./jobs/scheduleReminderJob');
-const paymentReminderJob = require('./jobs/paymentReminderJob');
 const monthlyResetJob = require('./jobs/monthlyResetJob');
 
 // Initialize Express
@@ -214,18 +213,6 @@ if (hasBrowser) {
 // STATIC PAGES (Legacy)
 // =====================================
 
-// WhatsApp Config Dashboard
-app.get('/configuration/lafi', (req, res) => {
-  const waConfigPath = path.join(__dirname, '../public/waconfig/index.html');
-  if (fs.existsSync(waConfigPath)) {
-    res.sendFile(waConfigPath);
-  } else {
-    res.status(404).json({ 
-      success: false, 
-      message: 'WhatsApp config page not found' 
-    });
-  }
-});
 
 // =====================================
 // HEALTH CHECK & STATUS
@@ -269,9 +256,7 @@ setTimeout(() => {
     reminder1Hour.start();
     console.log('⏰ Schedule reminder jobs started');
     
-    // paymentReminderJob.start();
     monthlyResetJob.start();
-    console.log('💰 Payment reminder jobs started');
   } catch (error) {
     console.error('❌ Error starting cron jobs:', error.message);
   }
