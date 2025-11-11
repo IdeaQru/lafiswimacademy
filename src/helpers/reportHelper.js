@@ -8,59 +8,12 @@ const TrainingEvaluation = require('../models/TrainingEvaluation');
 const Payment = require('../models/Payment');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
+const fs = require('fs');
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ HELPER 1: GET STUDENT EXPORT DATA
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
-/**
- * ✅ Get student export data - FIXED: Support 3 schedule types
- */
-async function getStudentExportData(studentId, startDate, endDate) {
-  try {
-    console.log('📊 Get student export data:', studentId);
-
-    const student = await Student.findOne({
-      $or: [{ _id: studentId }, { studentId: studentId }]
-    }).lean();
-
-    if (!student) throw new Error('Siswa tidak ditemukan');
-
-    const evalFilter = { studentId: student._id };
-    if (startDate && endDate) {
-      evalFilter.trainingDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    }
-
-    const evaluations = await TrainingEvaluation.find(evalFilter)
-      .populate('coachIds', '_id coachId fullName')
-      .populate('scheduleId', 'startTime endTime location program scheduleType programCategory')
-      .sort({ trainingDate: -1 })
-      .lean();
-
-    console.log(`✅ Found ${evaluations.length} evaluations`);
-
-    // Format history
-    const history = evaluations.map(ev => ({
-      date: ev.trainingDate,
-      time: ev.scheduleId ? `${ev.scheduleId.startTime} - ${ev.scheduleId.endTime}` : '-',
-      location: ev.scheduleId?.location || '-',
-      program: ev.scheduleId?.program || '-',
-      scheduleType: ev.scheduleId?.scheduleType || '-',
-      programCategory: ev.scheduleId?.programCategory || '-',
-      coachNames: (ev.coachIds || []).map(c => c.fullName).join(', ') || '-',
-      attendance: ev.attendance || 'Tidak Hadir',
-      notes: ev.notes || '-'
-    }));
-
-    return { student, history };
-  } catch (error) {
-    console.error('❌ Error getStudentExportData:', error);
-    throw error;
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ HELPER 2: GET COACH EXPORT DATA - COMPLETE FIXED
@@ -619,6 +572,305 @@ async function renderStudentPDF(doc, data) {
     y += 14;
   });
 }
+// backend/src/helpers/reportHelper.js
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ STUDENT REPORT FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ✅ Get student export data (LATEST from database)
+ * @param {string} studentId - Student ID (MongoDB ObjectId or studentId)
+ * @param {string} startDate - Start date (YYYY-MM-DD)
+ * @param {string} endDate - End date (YYYY-MM-DD)
+ * @returns {Promise<Object>} { student, history }
+ */
+async function getStudentExportData(studentId, startDate, endDate) {
+  try {
+    console.log('📊 Getting student export data...');
+    console.log('   Student ID:', studentId);
+    console.log('   Date range:', { startDate, endDate });
+
+    // ==================== GET STUDENT ====================
+    const student = await Student.findOne({
+      $or: [
+        { _id: mongoose.Types.ObjectId.isValid(studentId) ? studentId : null },
+        { studentId: studentId }
+      ]
+    }).lean();
+
+    if (!student) {
+      throw new Error('Siswa tidak ditemukan');
+    }
+
+    console.log('   Student found:', student.fullName);
+
+    // ==================== BUILD EVALUATION FILTER ====================
+    const evalFilter = { 
+      studentId: student._id 
+    };
+
+    if (startDate && endDate) {
+      evalFilter.trainingDate = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    // ==================== GET EVALUATIONS (LATEST DATA) ====================
+    const evaluations = await TrainingEvaluation.find(evalFilter)
+      .populate('coachIds', '_id coachId fullName')
+      .populate('scheduleId', 'startTime endTime location program scheduleType programCategory')
+      .sort({ trainingDate: -1 })
+      .lean();
+
+    console.log(`   ✅ Found ${evaluations.length} evaluations`);
+
+    // ==================== FORMAT HISTORY ====================
+    const history = evaluations.map(ev => {
+      const schedule = ev.scheduleId || {};
+      const coachNames = (ev.coachIds || [])
+        .map(c => c.fullName)
+        .join(', ') || '-';
+
+      return {
+        date: ev.trainingDate,
+        time: schedule.startTime && schedule.endTime 
+          ? `${schedule.startTime} - ${schedule.endTime}` 
+          : '-',
+        location: schedule.location || '-',
+        program: schedule.program || '-',
+        scheduleType: schedule.scheduleType || '-',
+        programCategory: schedule.programCategory || '-',
+        coachNames: coachNames,
+        attendance: ev.attendance || 'Tidak Hadir',
+        notes: ev.notes || '-',
+        createdAt: ev.createdAt
+      };
+    });
+
+    console.log('   ✅ Export data ready');
+
+    return { 
+      student: {
+        _id: student._id,
+        studentId: student.studentId,
+        fullName: student.fullName,
+        phone: student.phone,
+        status: student.status,
+        classLevel: student.classLevel
+      },
+      history 
+    };
+
+  } catch (error) {
+    console.error('❌ Error getStudentExportData:', error);
+    throw error;
+  }
+}
+
+async function generateStudentPDFToFile(studentId, startDate, endDate, outputPath) {
+  try {
+    console.log('📄 Generating student PDF to file...');
+    console.log('   Student ID:', studentId);
+    console.log('   Date range:', { startDate, endDate });
+    console.log('   Output:', outputPath);
+
+    // ✅ Get LATEST data from database
+    const data = await getStudentExportData(studentId, startDate, endDate);
+
+    if (!data || !data.student) {
+      throw new Error('No data found for student');
+    }
+
+    // ==================== CALCULATE STATS ====================
+    const stats = {
+      total: data.history.length,
+      hadir: data.history.filter(h => h.attendance.toLowerCase() === 'hadir').length,
+      tidakHadir: data.history.filter(h => h.attendance.toLowerCase() === 'tidak hadir').length,
+      izin: data.history.filter(h => h.attendance.toLowerCase() === 'izin').length,
+      sakit: data.history.filter(h => h.attendance.toLowerCase() === 'sakit').length
+    };
+    
+    stats.attendanceRate = stats.total > 0 
+      ? Math.round((stats.hadir / stats.total) * 100) 
+      : 0;
+
+    console.log('   Stats:', stats);
+
+    // ==================== CREATE PDF DOCUMENT ====================
+    const doc = new PDFDocument({ 
+      margin: 50, 
+      size: 'A4', 
+      bufferPages: true 
+    });
+
+    const writeStream = fs.createWriteStream(outputPath);
+    doc.pipe(writeStream);
+
+    // ==================== PDF HEADER ====================
+    const title = 'Laporan Riwayat Latihan';
+    const startDateStr = startDate 
+      ? new Date(startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      : 'Semua';
+    const endDateStr = endDate 
+      ? new Date(endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+      : 'Semua';
+
+    // Blue header background
+    doc.rect(0, 0, doc.page.width, 100).fill('#0ea5e9');
+    
+    doc.fillColor('#ffffff')
+       .fontSize(20)
+       .font('Helvetica-Bold')
+       .text('LAFI SWIMMING ACADEMY', 50, 20, { align: 'center' });
+    
+    doc.fontSize(14)
+       .text(title, 50, 45, { align: 'center' });
+    
+    doc.fontSize(9)
+       .font('Helvetica')
+       .text(`Periode: ${startDateStr} s/d ${endDateStr}`, 50, 65, { align: 'center' });
+    
+    const printedDate = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    doc.text(`Dicetak: ${printedDate} WIB`, 50, 78, { align: 'center' });
+
+    doc.moveDown(2).fillColor('#000000');
+
+    // ==================== STUDENT INFO CARD ====================
+    let y = 125;
+    
+    doc.roundedRect(50, y, doc.page.width - 100, 95, 5)
+       .fillAndStroke('#f0f9ff', '#0ea5e9');
+    
+    doc.fillColor('#0ea5e9')
+       .fontSize(12)
+       .font('Helvetica-Bold')
+       .text(`SISWA: ${data.student.fullName}`, 70, y + 10);
+    
+    doc.fontSize(9)
+       .fillColor('#1e293b')
+       .font('Helvetica')
+       .text(`ID: ${data.student.studentId}`, 70, y + 28)
+       .text(`Status: ${data.student.status}`, 70, y + 42)
+       .text(`Total Sesi: ${stats.total}`, 70, y + 56)
+       .text(`Hadir: ${stats.hadir} sesi (${stats.attendanceRate}%)`, 70, y + 70);
+
+    y += 105;
+
+    // ==================== TABLE HEADER ====================
+    doc.rect(50, y, doc.page.width - 100, 18)
+       .fill('#0ea5e9');
+    
+    doc.fillColor('#fff')
+       .fontSize(7)
+       .font('Helvetica-Bold')
+       .text('No', 60, y + 5, { width: 25 })
+       .text('Tanggal', 90, y + 5, { width: 55 })
+       .text('Waktu', 150, y + 5, { width: 40 })
+       .text('Tipe', 195, y + 5, { width: 35 })
+       .text('Program', 235, y + 5, { width: 55 })
+       .text('Pelatih', 295, y + 5, { width: 80 })
+       .text('Kehadiran', 380, y + 5, { width: 50 })
+       .text('Catatan', 435, y + 5, { width: 110 });
+
+    y += 20;
+
+    // ==================== HISTORY ROWS ====================
+    data.history.forEach((item, i) => {
+      // Check if need new page
+      if (y > doc.page.height - 100) {
+        doc.addPage();
+        y = 50;
+      }
+
+      const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
+      doc.rect(50, y, doc.page.width - 100, 16).fill(bgColor);
+
+      doc.fillColor('#000')
+         .fontSize(6.5)
+         .font('Helvetica')
+         .text(i + 1, 60, y + 4, { width: 25 })
+         .text(new Date(item.date).toLocaleDateString('id-ID'), 90, y + 4, { width: 55 })
+         .text(item.time, 150, y + 4, { width: 40 })
+         .text(item.scheduleType || '-', 195, y + 4, { width: 35 })
+         .text(item.program || '-', 235, y + 4, { width: 55 })
+         .text(item.coachNames, 295, y + 4, { width: 80 })
+         .text(item.attendance, 380, y + 4, { width: 50 })
+         .text(item.notes, 435, y + 4, { width: 110 });
+
+      y += 16;
+    });
+
+    // ==================== FOOTER ON ALL PAGES ====================
+    const pages = doc.bufferedPageRange();
+    
+    for (let i = 0; i < pages.count; i++) {
+      doc.switchToPage(i);
+      
+      // Footer line
+      doc.moveTo(50, doc.page.height - 50)
+         .lineTo(doc.page.width - 50, doc.page.height - 50)
+         .stroke('#e5e7eb');
+      
+      // Page number
+      doc.fontSize(7)
+         .fillColor('#6b7280')
+         .text(
+           `Halaman ${i + 1} dari ${pages.count}`, 
+           50, 
+           doc.page.height - 40, 
+           { 
+             align: 'center', 
+             width: doc.page.width - 100 
+           }
+         );
+      
+      // Footer text
+      doc.text(
+        'Lafi Swimming Academy - Surabaya', 
+        50, 
+        doc.page.height - 30, 
+        {
+          align: 'center',
+          width: doc.page.width - 100
+        }
+      );
+    }
+
+    doc.end();
+
+    // ==================== WAIT FOR FILE WRITE TO COMPLETE ====================
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
+
+    console.log('   ✅ PDF file generated successfully');
+
+    return {
+      filePath: outputPath,
+      data: data,
+      stats: stats
+    };
+
+  } catch (error) {
+    console.error('❌ Error generating PDF:', error);
+    throw error;
+  }
+}
+
+
+
 
 // ==================== PDF RENDER: COACH - REMOVED SPECIALIZATION ====================
 // ==================== PDF RENDER: COACH - FIXED ENCODING ====================
@@ -974,5 +1226,6 @@ module.exports = {
   getCoachExportData,
   getFinancialExportData,
   exportToPDFBeautiful,
-  exportToExcelBeautiful
+  exportToExcelBeautiful,
+  generateStudentPDFToFile,
 };

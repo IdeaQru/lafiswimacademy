@@ -14,7 +14,7 @@ const messageSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['notification', 'reminder', 'broadcast', 'manual'],
+    enum: ['notification', 'reminder', 'broadcast', 'manual',   'report',],
     default: 'manual',
   },
   status: {

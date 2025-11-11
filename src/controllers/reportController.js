@@ -232,44 +232,38 @@ exports.getStudentIndividualReport = async (req, res) => {
  * @route   GET /api/reports/students/list
  * @access  Private
  */
+/**
+ * ✅ Get students list with stats (for WhatsApp feature)
+ * @route GET /api/reports/students/list
+ * @access Private
+ */
 exports.getStudentsListWithStats = async (req, res) => {
   try {
-    const { 
-      startDate, 
-      endDate, 
-      sortBy = 'fullName', 
-      order = 'asc', 
-      classLevel,
-      status = 'Aktif'  // ✅ Default to Aktif, but allow override
-    } = req.query;
+    const { startDate, endDate, sortBy = 'fullName', order = 'asc', classLevel, status = 'Aktif' } = req.query;
 
-    console.log('📋 Getting students list with stats');
+    console.log('📋 GET /api/reports/students/list');
     console.log('   Query params:', { startDate, endDate, sortBy, order, classLevel, status });
 
-    // ==================== BUILD STUDENT FILTER ====================
+    // Build filter
     let studentFilter = {};
     
-    // Status filter
     if (status === 'all') {
-      studentFilter.status = { $ne: 'deleted' };  // All except deleted
+      studentFilter.status = { $ne: 'deleted' };
     } else {
-      studentFilter.status = status;  // Specific status (e.g., 'Aktif')
+      studentFilter.status = status;
     }
     
-    // Class level filter
     if (classLevel) {
       studentFilter.classLevel = classLevel;
     }
 
-    console.log('   Student filter:', studentFilter);
-
-    // ==================== GET STUDENTS ====================
+    // Get students
     const students = await Student.find(studentFilter)
-      .select('_id studentId fullName classLevel status phone photo enrollmentDate')  // ✅ ADD PHONE!
+      .select('_id studentId fullName phone classLevel status photo enrollmentDate')
       .sort({ fullName: 1 })
       .lean();
 
-    console.log(`✅ Found ${students.length} students`);
+    console.log(`   ✅ Found ${students.length} students`);
 
     if (students.length === 0) {
       return res.status(200).json({
@@ -285,7 +279,7 @@ exports.getStudentsListWithStats = async (req, res) => {
       });
     }
 
-    // ==================== GET EVALUATIONS ====================
+    // Get evaluations for date range
     const evalFilter = {};
     if (startDate && endDate) {
       evalFilter.trainingDate = {
@@ -294,13 +288,14 @@ exports.getStudentsListWithStats = async (req, res) => {
       };
     }
 
+    const TrainingEvaluation = require('../models/TrainingEvaluation');
     const evaluations = await TrainingEvaluation.find(evalFilter)
       .select('studentId attendance')
       .lean();
 
-    console.log(`✅ Found ${evaluations.length} evaluations`);
+    console.log(`   ✅ Found ${evaluations.length} evaluations`);
 
-    // ==================== BUILD STATS MAP ====================
+    // Build stats map
     const evalsByStudent = {};
     evaluations.forEach(ev => {
       const studentId = ev.studentId.toString();
@@ -316,8 +311,7 @@ exports.getStudentsListWithStats = async (req, res) => {
 
       evalsByStudent[studentId].total++;
       
-      // ✅ Case-insensitive comparison
-      const attendance = (ev.attendance || '').toLowerCase();
+      const attendance = (ev.attendance || '').toLowerCase().trim();
       
       if (attendance === 'hadir') {
         evalsByStudent[studentId].hadir++;
@@ -330,7 +324,7 @@ exports.getStudentsListWithStats = async (req, res) => {
       }
     });
 
-    // ==================== MAP STUDENTS WITH STATS ====================
+    // Map students with stats
     let studentsWithStats = students.map(student => {
       const studentIdStr = student._id.toString();
       const stats = evalsByStudent[studentIdStr] || {
@@ -349,7 +343,7 @@ exports.getStudentsListWithStats = async (req, res) => {
         _id: student._id.toString(),
         studentId: student.studentId,
         fullName: student.fullName,
-        phone: student.phone || null,  // ✅ INCLUDE PHONE!
+        phone: student.phone || null,
         classLevel: student.classLevel,
         status: student.status,
         photo: student.photo,
@@ -363,7 +357,7 @@ exports.getStudentsListWithStats = async (req, res) => {
       };
     });
 
-    // ==================== SORTING ====================
+    // Sorting
     const validSortKeys = ['fullName', 'attendanceRate', 'totalSessions', 'hadir', 'studentId'];
     const sortKey = validSortKeys.includes(sortBy) ? sortBy : 'fullName';
     const sortOrder = order === 'desc' ? -1 : 1;
@@ -372,7 +366,6 @@ exports.getStudentsListWithStats = async (req, res) => {
       let aVal = a[sortKey];
       let bVal = b[sortKey];
 
-      // Handle string comparison (case-insensitive)
       if (typeof aVal === 'string') {
         aVal = aVal.toLowerCase();
         bVal = bVal.toLowerCase();
@@ -385,9 +378,8 @@ exports.getStudentsListWithStats = async (req, res) => {
       }
     });
 
-    console.log(`✅ Sorted by ${sortKey} (${order})`);
+    console.log(`   ✅ Sorted by ${sortKey} (${order})`);
 
-    // ==================== RESPONSE ====================
     res.status(200).json({
       success: true,
       count: studentsWithStats.length,
@@ -407,10 +399,8 @@ exports.getStudentsListWithStats = async (req, res) => {
       }
     });
 
-    console.log('✅ Students list with stats sent successfully');
-
   } catch (error) {
-    console.error('❌ Error getting students list:', error);
+    console.error('❌ Error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get students list with stats',
@@ -1400,231 +1390,208 @@ exports.exportReport = async (req, res) => {
  * @route   POST /api/reports/student/:id/send-whatsapp
  * @access  Private
  */
-exports.generateAndSendStudentPDFToWhatsApp = async (req, res) => {
+exports.generateAndSendStudentPDFLinkToWhatsApp = async (req, res) => {
+  let pdfPath = null; // Track PDF path for cleanup on error
+
   try {
     const { id } = req.params;
     const { startDate, endDate, message } = req.body;
 
-    console.log('📱 Generate & send student PDF to WhatsApp...');
+    console.log('\n' + '='.repeat(80));
+    console.log('📱 GENERATE PDF & SEND LINK TO WHATSAPP');
+    console.log('='.repeat(80));
     console.log('   Student ID:', id);
     console.log('   Date range:', { startDate, endDate });
+    console.log('   Custom message:', message ? 'Yes' : 'No');
 
-    // ==================== GET STUDENT DATA ====================
+    // ==================== GET STUDENT ====================
     const student = await Student.findById(id);
+    
     if (!student) {
+      console.log('   ❌ Student not found');
       return res.status(404).json({
         success: false,
         message: 'Student not found'
       });
     }
 
-    // Check phone number
     if (!student.phone) {
+      console.log('   ❌ No phone number');
       return res.status(400).json({
         success: false,
         message: 'Nomor HP siswa tidak tersedia. Silakan update data siswa terlebih dahulu.'
       });
     }
 
-    console.log('   Student:', student.fullName);
-    console.log('   Phone:', student.phone);
+    console.log('   ✅ Student:', student.fullName);
+    console.log('   ✅ Phone:', student.phone);
 
-    // ==================== GET REPORT DATA ====================
-    // ✅ REUSE EXISTING HELPER
-    const data = await reportHelper.getStudentExportData(id, startDate, endDate);
-
-    console.log(`   History count: ${data.history.length}`);
-
-    // Calculate stats
-    const stats = {
-      total: data.history.length,
-      hadir: data.history.filter(h => h.attendance === 'hadir').length,
-      tidakHadir: data.history.filter(h => h.attendance === 'tidak hadir').length,
-      izin: data.history.filter(h => h.attendance === 'izin').length,
-      sakit: data.history.filter(h => h.attendance === 'sakit').length
-    };
-    stats.attendanceRate = stats.total > 0 
-      ? Math.round((stats.hadir / stats.total) * 100) 
-      : 0;
-
-    console.log('   Stats:', stats);
-
-    // ==================== GENERATE PDF TO TEMP FILE ====================
-    const tempDir = path.join(__dirname, '../../temp');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
+    // ==================== ENSURE REPORTS DIRECTORY EXISTS ====================
+    const reportsDir = path.join(__dirname, '../../public/reports');
+    
+    if (!fs.existsSync(reportsDir)) {
+      fs.mkdirSync(reportsDir, { recursive: true });
+      console.log('   ✅ Created reports directory');
     }
 
-    const pdfPath = path.join(tempDir, `student-report-${id}-${Date.now()}.pdf`);
-    
-    // ✅ REUSE EXISTING PDF GENERATOR - Write to file instead of response
-    const writeStream = fs.createWriteStream(pdfPath);
-    
-    // Create a mock response object that writes to file
-    const mockRes = {
-      setHeader: () => {},
-      headersSent: false,
-      pipe: (stream) => stream,
-      // Pipe PDFDocument output to file
-      write: (chunk) => writeStream.write(chunk),
-      end: () => {
-        writeStream.end();
-      }
-    };
+    // ==================== GENERATE PDF (REAL-TIME DATA) ====================
+    const timestamp = Date.now();
+    const filename = `report-${student.studentId}-${timestamp}.pdf`;
+    pdfPath = path.join(reportsDir, filename);
 
-    // ✅ Call existing helper with mock response
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
+    console.log('\n   📄 Generating PDF with LATEST data from database...');
+    console.log('   Filename:', filename);
 
-      // Use existing helper
-      const PDFDocument = require('pdfkit');
-      const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
-      doc.pipe(writeStream);
+    // ✅ Generate PDF with LATEST data from DB
+    const result = await reportHelper.generateStudentPDFToFile(id, startDate, endDate, pdfPath);
 
-      // ✅ REUSE EXISTING RENDERING LOGIC
-      // Copy from renderStudentPDF in reportHelper.js
-      const title = 'Laporan Riwayat Latihan';
-      const startDateStr = startDate || 'Semua';
-      const endDateStr = endDate || 'Semua';
+    console.log('   ✅ PDF generated successfully');
+    console.log('   📊 Stats:', result.stats);
 
-      // Header
-      doc.rect(0, 0, doc.page.width, 100).fill('#0ea5e9');
-      doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold')
-         .text('LAFI SWIMMING ACADEMY', 50, 20, { align: 'center' });
-      doc.fontSize(14).text(title, 50, 45, { align: 'center' });
-      doc.fontSize(9).font('Helvetica')
-         .text(`Periode: ${startDateStr} s/d ${endDateStr}`, 50, 65, { align: 'center' });
-      doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, 50, 78, { align: 'center' });
+    // ==================== GENERATE PUBLIC URL ====================
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    const publicUrl = `${baseUrl}/reports/${filename}`;
 
-      doc.moveDown(2).fillColor('#000000');
+    console.log('   🔗 Public URL:', publicUrl);
 
-      // Student Info
-      let y = 125;
-      doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
-        .fillAndStroke('#f0f9ff', '#0ea5e9');
-      doc.fillColor('#0ea5e9').fontSize(12).font('Helvetica-Bold')
-        .text(`SISWA: ${data.student.fullName}`, 70, y + 10);
-      doc.fontSize(9).fillColor('#1e293b').font('Helvetica')
-        .text(`ID: ${data.student.studentId}`, 70, y + 28)
-        .text(`Total Sesi: ${data.history.length}`, 70, y + 42)
-        .text(`Hadir: ${stats.hadir} | Tingkat Kehadiran: ${stats.attendanceRate}%`, 70, y + 56);
-
-      y += 75;
-
-      // Table Header
-      doc.rect(50, y, doc.page.width - 100, 16).fill('#0ea5e9');
-      doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
-        .text('Tanggal', 60, y + 4, { width: 40 })
-        .text('Waktu', 105, y + 4, { width: 35 })
-        .text('Tipe', 145, y + 4, { width: 30 })
-        .text('Kategori', 180, y + 4, { width: 35 })
-        .text('Program', 220, y + 4, { width: 40 })
-        .text('Pelatih', 265, y + 4, { width: 60 })
-        .text('Kehadiran', 330, y + 4, { width: 35 })
-        .text('Catatan', 370, y + 4, { width: 125 });
-
-      y += 18;
-
-      // History rows
-      data.history.forEach((item, i) => {
-        if (y > doc.page.height - 100) {
-          doc.addPage();
-          y = 50;
-        }
-
-        const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
-        doc.rect(50, y, doc.page.width - 100, 14).fill(bgColor);
-
-        doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-          .text(new Date(item.date).toLocaleDateString('id-ID'), 60, y + 2, { width: 40 })
-          .text(item.time, 105, y + 2, { width: 35 })
-          .text(item.scheduleType || '-', 145, y + 2, { width: 30 })
-          .text(item.programCategory, 180, y + 2, { width: 35 })
-          .text(item.program, 220, y + 2, { width: 40 })
-          .text(item.coachNames, 265, y + 2, { width: 60 })
-          .text(item.attendance, 330, y + 2, { width: 35 })
-          .text(item.notes, 370, y + 2, { width: 125 });
-
-        y += 14;
-      });
-
-      // Footer
-      const pages = doc.bufferedPageRange();
-      for (let i = 0; i < pages.count; i++) {
-        doc.switchToPage(i);
-        doc.moveTo(50, doc.page.height - 45)
-          .lineTo(doc.page.width - 50, doc.page.height - 45)
-          .stroke('#e5e7eb');
-        doc.fontSize(8).fillColor('#6b7280')
-          .text(`Halaman ${i + 1} dari ${pages.count}`, 50, doc.page.height - 35, { 
-            align: 'center', 
-            width: doc.page.width - 100 
-          });
-      }
-
-      doc.end();
-    });
-
-    console.log('   ✅ PDF generated:', pdfPath);
-
-    // ==================== SEND VIA WHATSAPP ====================
+    // ==================== CHECK WHATSAPP SERVICE ====================
     if (!whatsappService.isReady()) {
-      // Clean up PDF
-      fs.unlinkSync(pdfPath);
+      console.log('   ❌ WhatsApp service not ready');
+      
+      // Cleanup PDF before returning error
+      if (fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
+        console.log('   🗑️ Cleaned up PDF');
+      }
       
       return res.status(503).json({
         success: false,
-        message: 'WhatsApp service tidak tersedia saat ini'
+        message: 'WhatsApp service tidak tersedia saat ini. Silakan coba lagi nanti.'
       });
     }
 
-    // Custom message or default
+    console.log('   ✅ WhatsApp service ready');
+
+    // ==================== CALCULATE EXPIRY TIME ====================
+    const expiryDate = new Date();
+    expiryDate.setHours(expiryDate.getHours() + 1); // ✅ 1 hour from now
+
+    const expiryTimeStr = expiryDate.toLocaleString('id-ID', { 
+      day: 'numeric', 
+      month: 'long', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    console.log('   ⏰ Expiry time:', expiryTimeStr);
+
+    // ==================== FORMAT WHATSAPP MESSAGE ====================
     const whatsappMessage = message || 
       `Halo ${student.fullName}! 👋\n\n` +
       `Berikut adalah laporan riwayat latihan Anda di Lafi Swimming Academy.\n\n` +
-      `📊 *Statistik:*\n` +
-      `Total Sesi: ${stats.total}\n` +
-      `✅ Hadir: ${stats.hadir} sesi\n` +
-      `📈 Tingkat Kehadiran: ${stats.attendanceRate}%\n\n` +
+      `📊 *Statistik Latihan:*\n` +
+      `📅 Periode: ${startDate ? new Date(startDate).toLocaleDateString('id-ID') : 'Semua'} - ${endDate ? new Date(endDate).toLocaleDateString('id-ID') : 'Semua'}\n` +
+      `✅ Total Sesi: ${result.stats.total}\n` +
+      `✅ Hadir: ${result.stats.hadir}\n` +
+      `❌ Tidak Hadir: ${result.stats.tidakHadir}\n` +
+      `📝 Izin: ${result.stats.izin}\n` +
+      `🏥 Sakit: ${result.stats.sakit}\n` +
+      `📈 Tingkat Kehadiran: ${result.stats.attendanceRate}%\n\n` +
+      `📄 *Download Laporan PDF:*\n` +
+      `${publicUrl}\n\n` +
+      `⏰ *Link berlaku hingga:*\n` +
+      `${expiryTimeStr} WIB\n\n` +
+      `_Link ini akan otomatis dihapus setelah 1 jam untuk keamanan data._\n\n` +
       `Terima kasih atas dedikasi Anda! 💪\n\n` +
       `*Lafi Swimming Academy*\n` +
       `📱 WA: 0821-4004-4677`;
 
-    // Send document via WhatsApp
-    const result = await whatsappService.sendDocument(
+    console.log('   📝 Message length:', whatsappMessage.length, 'characters');
+
+    // ==================== SEND VIA WHATSAPP ====================
+    console.log('\n   📤 Sending link to WhatsApp...');
+
+    await whatsappService.sendMessage(
       student.phone,
-      pdfPath,
       whatsappMessage,
+      'report',
+      req.user?._id,
       {
         recipientName: student.fullName,
-        documentType: 'student-report',
-        studentId: student._id
+        documentType: 'student-report-link',
+        studentId: student._id,
+        reportUrl: publicUrl,
+        filename: filename,
+        expiresAt: expiryDate
       }
     );
 
-    // Clean up PDF file
-    fs.unlinkSync(pdfPath);
-    console.log('   🗑️ PDF file cleaned up');
+    console.log('   ✅ Link sent successfully to', student.phone);
 
-    console.log('   ✅ Report sent to WhatsApp!');
+    // ==================== SCHEDULE AUTO-DELETE (1 HOUR) ====================
+    const deleteAfterMs = 60 * 60 * 1000; // ✅ 1 hour = 60 minutes * 60 seconds * 1000 ms
+    
+    setTimeout(() => {
+      if (fs.existsSync(pdfPath)) {
+        try {
+          fs.unlinkSync(pdfPath);
+          console.log(`\n🗑️ AUTO-DELETED: ${filename}`);
+          console.log(`   Deleted at: ${new Date().toLocaleString('id-ID')}`);
+          console.log(`   Reason: 1 hour expiry`);
+        } catch (deleteError) {
+          console.error(`   ❌ Failed to delete: ${deleteError.message}`);
+        }
+      }
+    }, deleteAfterMs);
+
+    console.log(`\n   ⏱️ Auto-delete scheduled:`);
+    console.log(`   Will be deleted at: ${expiryDate.toLocaleString('id-ID')}`);
+    console.log(`   Time remaining: 60 minutes`);
+
+    // ==================== RESPONSE ====================
+    console.log('\n' + '='.repeat(80));
+    console.log('✅ SUCCESS - Link sent to WhatsApp');
+    console.log('='.repeat(80) + '\n');
 
     res.json({
       success: true,
-      message: `Laporan berhasil dikirim ke WhatsApp ${student.fullName}!`,
+      message: `Link laporan berhasil dikirim ke WhatsApp ${student.fullName}!`,
       data: {
         student: {
           id: student._id,
+          studentId: student.studentId,
           name: student.fullName,
           phone: student.phone
         },
-        stats,
+        report: {
+          filename: filename,
+          url: publicUrl,
+          expiresAt: expiryDate,
+          expiresIn: '1 hour'
+        },
+        stats: result.stats,
         sentAt: new Date()
       }
     });
 
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('\n' + '='.repeat(80));
+    console.error('❌ ERROR - Failed to send PDF link');
+    console.error('='.repeat(80));
+    console.error('   Error:', error.message);
+    console.error('   Stack:', error.stack);
+    
+    // ✅ CLEANUP PDF ON ERROR
+    if (pdfPath && fs.existsSync(pdfPath)) {
+      try {
+        fs.unlinkSync(pdfPath);
+        console.log('   🗑️ Cleaned up PDF after error');
+      } catch (cleanupError) {
+        console.error('   ⚠️ Cleanup failed:', cleanupError.message);
+      }
+    }
+
     res.status(500).json({
       success: false,
       message: 'Gagal mengirim laporan ke WhatsApp',
@@ -1632,6 +1599,8 @@ exports.generateAndSendStudentPDFToWhatsApp = async (req, res) => {
     });
   }
 };
+
+
 
 
 

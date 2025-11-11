@@ -10,7 +10,7 @@ const {
   getFinancialReport,
   exportReport,
   getStudentsListWithStats,
-  generateAndSendStudentPDFToWhatsApp
+  generateAndSendStudentPDFLinkToWhatsApp
 } = require('../controllers/reportController');
 
 // ✅ Apply protect middleware ke SEMUA routes
@@ -21,7 +21,7 @@ router.post(
   '/student/:id/send-whatsapp', 
   protect, 
   authorize('admin'),  // Only admin & instructor can send
-  generateAndSendStudentPDFToWhatsApp
+  generateAndSendStudentPDFLinkToWhatsApp
 );
 // ==================== STUDENT REPORTS ====================
 router.get('/students/search', searchStudentsForReport);

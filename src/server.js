@@ -212,6 +212,7 @@ if (hasBrowser) {
 // =====================================
 // STATIC PAGES (Legacy)
 // =====================================
+app.use('/reports', express.static(path.join(__dirname, '../public/reports')));
 
 
 // =====================================
