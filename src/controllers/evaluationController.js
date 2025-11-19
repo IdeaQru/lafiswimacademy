@@ -364,7 +364,7 @@ exports.getCoachReport = async (req, res) => {
     console.log('='.repeat(100));
 
     const scheduleFilter = {};
-
+    
     if (startDate && endDate) {
       scheduleFilter.date = {
         $gte: new Date(startDate),
@@ -373,7 +373,7 @@ exports.getCoachReport = async (req, res) => {
     }
 
     let coachObjectId = null;
-
+    
     if (coachId) {
       if (coachId.match(/^[0-9a-fA-F]{24}$/)) {
         coachObjectId = new mongoose.Types.ObjectId(coachId);
@@ -383,7 +383,6 @@ exports.getCoachReport = async (req, res) => {
       }
     }
 
-    // ✅ FIXED: Filter untuk 3 tipe schedule
     if (coachObjectId) {
       scheduleFilter.$or = [
         { coachId: coachObjectId, scheduleType: 'private' },
@@ -392,7 +391,6 @@ exports.getCoachReport = async (req, res) => {
       ];
     }
 
-    // ✅ Fetch schedules dengan FULL populate
     const schedules = await Schedule.find(scheduleFilter)
       .populate('coachId', '_id coachId fullName specialization phone')
       .populate('studentId', '_id studentId fullName classLevel phone')
@@ -404,22 +402,22 @@ exports.getCoachReport = async (req, res) => {
 
     console.log(`✅ Found ${schedules.length} schedules`);
 
-    // ==================== NORMALIZE STUDENTS - FIXED: 3 TYPES ====================
+    // ==================== NORMALIZE STUDENTS - WITH SAFE CHECKS ====================
     const normalizedSchedules = schedules.map(schedule => {
       let students = [];
 
       if (schedule.scheduleType === 'private') {
-        // Case 1: Private dengan students array
         if (Array.isArray(schedule.students) && schedule.students.length > 0) {
-          students = schedule.students.map(s => ({
-            _id: s._id.toString(),
-            studentId: s.studentId || s._id.toString(),
-            fullName: s.fullName,
-            classLevel: s.classLevel || ''
-          }));
+          students = schedule.students
+            .filter(s => s && s._id)  // ✅ Filter null
+            .map(s => ({
+              _id: s._id.toString(),
+              studentId: s.studentId || s._id.toString(),
+              fullName: s.fullName || 'Unknown',
+              classLevel: s.classLevel || ''
+            }));
         }
-        // Case 2: Private tanpa students - ambil dari studentId
-        else if (schedule.studentId) {
+        else if (schedule.studentId && schedule.studentId._id) {
           const s = schedule.studentId;
           students = [{
             _id: s._id.toString(),
@@ -428,25 +426,16 @@ exports.getCoachReport = async (req, res) => {
             classLevel: s.classLevel || ''
           }];
         }
-      } else if (schedule.scheduleType === 'semiPrivate') {
-        // ✅ SEMI PRIVATE dengan students array
+      } else if (schedule.scheduleType === 'semiPrivate' || schedule.scheduleType === 'group') {
         if (Array.isArray(schedule.students)) {
-          students = schedule.students.map(s => ({
-            _id: s._id.toString(),
-            studentId: s.studentId || s._id.toString(),
-            fullName: s.fullName,
-            classLevel: s.classLevel || ''
-          }));
-        }
-      } else if (schedule.scheduleType === 'group') {
-        // ✅ GROUP dengan students array
-        if (Array.isArray(schedule.students)) {
-          students = schedule.students.map(s => ({
-            _id: s._id.toString(),
-            studentId: s.studentId || s._id.toString(),
-            fullName: s.fullName,
-            classLevel: s.classLevel || ''
-          }));
+          students = schedule.students
+            .filter(s => s && s._id)  // ✅ Filter null
+            .map(s => ({
+              _id: s._id.toString(),
+              studentId: s.studentId || s._id.toString(),
+              fullName: s.fullName || 'Unknown',
+              classLevel: s.classLevel || ''
+            }));
         }
       }
 
@@ -457,7 +446,7 @@ exports.getCoachReport = async (req, res) => {
 
     // ==================== GET EVALUATIONS ====================
     const scheduleIds = normalizedSchedules.map(s => s._id);
-
+    
     const evaluations = await TrainingEvaluation
       .find({ scheduleId: { $in: scheduleIds } })
       .populate('studentId', '_id studentId fullName classLevel')
@@ -467,24 +456,26 @@ exports.getCoachReport = async (req, res) => {
 
     console.log(`✅ Found ${evaluations.length} evaluations`);
 
-    // ==================== BUILD MAPS ====================
+    // ==================== BUILD MAPS WITH SAFE CHECKS ====================
     const evaluationMap = {};
     evaluations.forEach(ev => {
+      if (!ev.scheduleId) return;  // ✅ Skip if no scheduleId
+      
       const scheduleId = ev.scheduleId.toString();
       if (!evaluationMap[scheduleId]) {
         evaluationMap[scheduleId] = [];
       }
+      
       evaluationMap[scheduleId].push({
-        studentId: ev.studentId._id.toString(),
-        studentName: ev.studentId.fullName,
-        studentLevel: ev.studentId.classLevel,
+        studentId: ev.studentId?._id?.toString() || '',
+        studentName: ev.studentId?.fullName || 'Unknown',
+        studentLevel: ev.studentId?.classLevel || '',
         attendance: ev.attendance,
         notes: ev.notes || '',
         coachNames: (ev.coachIds || [])
-          .filter(c => c && c.fullName)  // ✅ Filter null/undefined
+          .filter(c => c && c.fullName)  // ✅ Filter null coaches
           .map(c => c.fullName)
           .join(', '),
-
         coachEvaluations: (ev.coachIds || [])
           .filter(c => c && c._id)  // ✅ Filter null
           .map(c => ({
@@ -493,41 +484,38 @@ exports.getCoachReport = async (req, res) => {
             attendance: ev.attendance,
             notes: ev.notes
           })),
-
         coachNotesHistory: (ev.coachNotes || []).map(cn => ({
-          coachName: cn.coachName,
-          notes: cn.notes,
+          coachName: cn.coachName || 'Unknown',
+          notes: cn.notes || '',
           addedAt: cn.addedAt
         }))
       });
     });
 
-    // ==================== BUILD COACH MAP - FIXED: 3 TYPES ====================
+    // ==================== BUILD COACH MAP WITH SAFE CHECKS ====================
     const coachMap = {};
-
+    
     normalizedSchedules.forEach((schedule) => {
       let coachsForThisSchedule = [];
 
-      if (schedule.scheduleType === 'private' && schedule.coachId) {
+      if (schedule.scheduleType === 'private' && schedule.coachId && schedule.coachId._id) {
         coachsForThisSchedule = [schedule.coachId];
-      }
-      else if (schedule.scheduleType === 'semiPrivate' && Array.isArray(schedule.coaches)) {
-        coachsForThisSchedule = schedule.coaches;
-      }
-      else if (schedule.scheduleType === 'group' && Array.isArray(schedule.coaches)) {
-        coachsForThisSchedule = schedule.coaches;
+      } 
+      else if ((schedule.scheduleType === 'semiPrivate' || schedule.scheduleType === 'group') 
+               && Array.isArray(schedule.coaches)) {
+        coachsForThisSchedule = schedule.coaches.filter(c => c && c._id);  // ✅ Filter null
       }
 
       coachsForThisSchedule.forEach((coach) => {
-        if (!coach) return;
+        if (!coach || !coach._id) return;  // ✅ Skip if invalid
 
         const coachObjectId = coach._id.toString();
         const coachKey = coach.coachId || coachObjectId;
-
+        
         if (!coachMap[coachKey]) {
           coachMap[coachKey] = {
             coachId: coachKey,
-            coachName: coach.fullName,
+            coachName: coach.fullName || 'Unknown',
             specialization: coach.specialization || '',
             totalSessions: 0,
             completedSessions: 0,
@@ -539,7 +527,7 @@ exports.getCoachReport = async (req, res) => {
         }
 
         coachMap[coachKey].totalSessions++;
-
+        
         if (schedule.status === 'completed') {
           coachMap[coachKey].completedSessions++;
         } else if (schedule.status === 'cancelled') {
@@ -552,12 +540,14 @@ exports.getCoachReport = async (req, res) => {
         const students = schedule.students || [];
 
         students.forEach(s => {
-          coachMap[coachKey].totalStudents.add(s._id);
+          if (s && s._id) {  // ✅ Check before add
+            coachMap[coachKey].totalStudents.add(s._id);
+          }
         });
 
         coachMap[coachKey].sessions.push({
           scheduleId: schedule._id.toString(),
-          scheduleType: schedule.scheduleType, // ✅ Preserve scheduleType (private/semiPrivate/group)
+          scheduleType: schedule.scheduleType,
           groupName: schedule.groupName || '',
           program: schedule.program || 'Unknown',
           programCategory: schedule.programCategory || 'General',
@@ -588,13 +578,6 @@ exports.getCoachReport = async (req, res) => {
     console.log('\n' + '='.repeat(100));
     console.log('✅ FINAL RESULT:');
     console.log('='.repeat(100));
-    coachReports.forEach(coach => {
-      console.log(`\nCoach: ${coach.coachName}`);
-      coach.sessions.forEach((s, idx) => {
-        const status = s.studentCount > 0 ? '✅' : '❌';
-        console.log(`  [${idx}] ${s.scheduleType}: ${s.studentCount} students ${status}`);
-      });
-    });
 
     const data = {
       stats: {
@@ -615,13 +598,15 @@ exports.getCoachReport = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Error:', error);
+    console.error('❌ Error in getCoachReport:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
+
 
 // ==================== GET STUDENT HISTORY ====================
 
