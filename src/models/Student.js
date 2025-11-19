@@ -18,6 +18,11 @@ const studentSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
+  shortName: {
+    type: String,
+    trim: true,       // Menghapus spasi di awal/akhir
+    maxlength: 50     // Maksimal 50 karakter
+  },
   dateOfBirth: {
     type: Date,
     required: [true, 'Date of birth is required']

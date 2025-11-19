@@ -143,8 +143,7 @@ exports.getAllStudents = async (req, res) => {
       order = 'desc'
     } = req.query;
 
-    console.log('📋 Getting all students with pagination');
-    console.log('   Params:', { status, search, page, limit, sortBy, order });
+
 
     // ✅ Build query filter
     let query = {};
@@ -159,7 +158,8 @@ exports.getAllStudents = async (req, res) => {
         { fullName: searchRegex },
         { studentId: searchRegex },
         { phone: searchRegex },
-        { parentName: searchRegex }
+        { parentName: searchRegex },
+        {shortName: searchRegex},
       ];
     }
 
@@ -493,7 +493,7 @@ exports.searchStudents = async (req, res) => {
         { parentName: searchRegex }
       ]
     })
-    .select('_id studentId fullName phone status photo')
+    .select('_id studentId fullName phone status photo shortName')
     .limit(20)
     .lean();
 

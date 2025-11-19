@@ -330,35 +330,30 @@ const transformSchedule = (schedule) => {
     transformed.coachId = schedule.coachId?._id?.toString() || schedule.coachId;
     transformed.studentName = schedule.studentId?.fullName || schedule.studentName;
     transformed.coachName = schedule.coachId?.fullName || schedule.coachName;
-    transformed.studentPhone = undefined;
-    transformed.coachPhone = schedule.coachId?.phone || schedule.coachPhone;
-  }
-  else if (schedule.scheduleType === 'semiPrivate') {
-    transformed.coachId = schedule.coachId?._id?.toString() || schedule.coachId;
-    transformed.coachName = schedule.coachId?.fullName || schedule.coachName;
-    transformed.coachPhone = schedule.coachId?.phone || schedule.coachPhone;
-    transformed.students = (schedule.students || []).map(s => ({
-      _id: s._id,
-      fullName: s.fullName
-    }));
-  }
-  else if (schedule.scheduleType === 'group') {
-    transformed.coachId = undefined;
-    transformed.coachName = schedule.coaches
-      ?.map(c => c.fullName)
-      .join(', ') || 'Unknown';
-    transformed.coachPhone = schedule.coaches
-      ?.map(c => c.phone)
-      .filter(Boolean)
-      .join(', ') || null;
-    transformed.students = (schedule.students || []).map(s => ({
-      _id: s._id,
-      fullName: s.fullName
-    }));
+  } else {
+    // semiPrivate & group schedules
+  transformed.coaches = (schedule.coaches || [])
+  .filter(c => c._id)
+  .map(c => ({
+    _id: c._id.toString(),
+    fullName: c.fullName,
+    phone: c.phone
+  }));
+
+  transformed.students = (schedule.students || [])
+  .filter(s => s._id)
+  .map(s => ({
+    _id: s._id.toString(),
+    fullName: s.fullName,
+    phone: s.phone
+  }));
+
   }
 
   return transformed;
 };
+
+
 
 /**
  * ✅ Send WhatsApp to multiple recipients
@@ -416,7 +411,7 @@ exports.getSchedules = async (req, res) => {
       .populate('studentId', '_id fullName')
       .populate('coachId', '_id fullName phone')
       .populate('students', '_id fullName')
-      .populate('coaches._id', '_id fullName phone')
+      .populate('coaches', '_id fullName phone')
       .sort({ date: -1 })
       .lean();
 
@@ -464,7 +459,7 @@ exports.getSchedulesByDateRange = async (req, res) => {
       .populate('studentId', '_id fullName')
       .populate('coachId', '_id fullName phone')
       .populate('students', '_id fullName')
-      .populate('coaches._id', '_id fullName phone')
+      .populate('coaches', '_id fullName phone')
       .lean();
 
     const transformed = schedules.map(transformSchedule);
@@ -497,7 +492,7 @@ exports.getScheduleById = async (req, res) => {
       .populate('studentId', '_id fullName')
       .populate('coachId', '_id fullName phone')
       .populate('students', '_id fullName')
-      .populate('coaches._id', '_id fullName phone')
+      .populate('coaches', '_id fullName phone')
       .lean();
 
     if (!schedule) {
@@ -541,7 +536,7 @@ exports.getSchedulesByCoach = async (req, res) => {
       .populate('studentId', '_id fullName')
       .populate('coachId', '_id fullName phone')
       .populate('students', '_id fullName')
-      .populate('coaches._id', '_id fullName phone')
+      .populate('coaches', '_id fullName phone')
       .lean();
 
     const transformed = schedules.map(transformSchedule);
@@ -581,7 +576,7 @@ exports.getSchedulesByStudent = async (req, res) => {
       .populate('coachId', '_id fullName phone')
       .populate('studentId', '_id fullName')
       .populate('students', '_id fullName')
-      .populate('coaches._id', '_id fullName phone')
+      .populate('coaches', '_id fullName phone')
       .lean();
 
     const transformed = schedules.map(transformSchedule);

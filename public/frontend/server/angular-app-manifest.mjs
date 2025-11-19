@@ -13,9 +13,9 @@ export default {
     "chunk-LKTXU4ZY.js"
   ],
   "src/app/pages/sidebar/schedule/schedule.ts": [
-    "chunk-RZDWY3O7.js",
+    "chunk-ZRVVWYLM.js",
     "chunk-C2UT65CU.js",
-    "chunk-YSFBRVRA.js",
+    "chunk-KYE62AF7.js",
     "chunk-65JJV7WV.js",
     "chunk-KJZSSDT6.js",
     "chunk-LKTXU4ZY.js"
@@ -36,8 +36,8 @@ export default {
     "chunk-LKTXU4ZY.js"
   ],
   "src/app/pages/registration/registration.ts": [
-    "chunk-VPUPXMUK.js",
-    "chunk-YSFBRVRA.js",
+    "chunk-E3XTTGQ2.js",
+    "chunk-KYE62AF7.js",
     "chunk-65JJV7WV.js",
     "chunk-LKTXU4ZY.js"
   ],
@@ -55,8 +55,8 @@ export default {
     "chunk-LKTXU4ZY.js"
   ],
   "src/app/pages/sidebar/students/students.ts": [
-    "chunk-54XUYTKS.js",
-    "chunk-YSFBRVRA.js",
+    "chunk-JBLCOG7S.js",
+    "chunk-KYE62AF7.js",
     "chunk-LKTXU4ZY.js"
   ],
   "src/app/pages/sidebar/coaches/coaches.ts": [
@@ -67,8 +67,8 @@ export default {
   ]
 },
   assets: {
-    'index.csr.html': {size: 32892, hash: '17b627ba168d4d04115138f93918b2be0c1796d641c61f725db235eb6ddee550', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
-    'index.server.html': {size: 24621, hash: 'b285cc6ec3df256b5ca063665be34686ed4e1922d9d56e54179628ac7baa91bf', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
+    'index.csr.html': {size: 32892, hash: '2be1ac3a24f8cc13fd8102e9735c8cd9fdc41a235eab0c13c3e1c5d394a77fba', text: () => import('./assets-chunks/index_csr_html.mjs').then(m => m.default)},
+    'index.server.html': {size: 24621, hash: '2a9af400083907753350cef576af5e50443c8b8b0c6a0258c42c40be48ad83cd', text: () => import('./assets-chunks/index_server_html.mjs').then(m => m.default)},
     'styles-5IICDY77.css': {size: 10151, hash: 'bgIYC/G4a7E', text: () => import('./assets-chunks/styles-5IICDY77_css.mjs').then(m => m.default)}
   },
 };
