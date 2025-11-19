@@ -104,10 +104,10 @@ exports.bulkCreateEvaluation = async (req, res) => {
     // ==================== GET CURRENT COACH OBJECT ====================
     let actualCoachObjectId;
     let coachObject = null;
-    
+
     if (coachId) {
       // Find dari allCoachObjectData dulu
-      coachObject = allCoachObjectData.find(c => 
+      coachObject = allCoachObjectData.find(c =>
         c.coachId === coachId || c._id.toString() === coachId
       );
 
@@ -140,7 +140,7 @@ exports.bulkCreateEvaluation = async (req, res) => {
     const promises = evaluations.map(async (evalItem) => {
       try {
         let studentObjectId;
-        
+
         if (evalItem.studentId.match?.(/^[0-9a-fA-F]{24}$/)) {
           studentObjectId = evalItem.studentId;
         } else {
@@ -277,7 +277,7 @@ exports.getEvaluationsBySchedule = async (req, res) => {
 
     // ==================== PERMISSION CHECK - FIXED: 3 TYPES ====================
     let scheduleCoachIds = [];
-    
+
     if (schedule.scheduleType === 'private' && schedule.coachId) {
       scheduleCoachIds = [schedule.coachId._id];
     } else if (schedule.scheduleType === 'semiPrivate' && schedule.coaches) {
@@ -310,10 +310,10 @@ exports.getEvaluationsBySchedule = async (req, res) => {
 
     // ✅ Group by student
     const mergedByStudent = {};
-    
+
     evaluations.forEach(evaluation => {
       const studentId = evaluation.studentId._id.toString();
-      
+
       if (!mergedByStudent[studentId]) {
         mergedByStudent[studentId] = {
           studentId: evaluation.studentId.studentId,
@@ -364,7 +364,7 @@ exports.getCoachReport = async (req, res) => {
     console.log('='.repeat(100));
 
     const scheduleFilter = {};
-    
+
     if (startDate && endDate) {
       scheduleFilter.date = {
         $gte: new Date(startDate),
@@ -373,7 +373,7 @@ exports.getCoachReport = async (req, res) => {
     }
 
     let coachObjectId = null;
-    
+
     if (coachId) {
       if (coachId.match(/^[0-9a-fA-F]{24}$/)) {
         coachObjectId = new mongoose.Types.ObjectId(coachId);
@@ -457,7 +457,7 @@ exports.getCoachReport = async (req, res) => {
 
     // ==================== GET EVALUATIONS ====================
     const scheduleIds = normalizedSchedules.map(s => s._id);
-    
+
     const evaluations = await TrainingEvaluation
       .find({ scheduleId: { $in: scheduleIds } })
       .populate('studentId', '_id studentId fullName classLevel')
@@ -480,13 +480,20 @@ exports.getCoachReport = async (req, res) => {
         studentLevel: ev.studentId.classLevel,
         attendance: ev.attendance,
         notes: ev.notes || '',
-        coachNames: (ev.coachIds || []).map(c => c.fullName).join(', '),
-        coachEvaluations: (ev.coachIds || []).map(c => ({
-          coachId: c._id.toString(),
-          coachName: c.fullName,
-          attendance: ev.attendance,
-          notes: ev.notes
-        })),
+        coachNames: (ev.coachIds || [])
+          .filter(c => c && c.fullName)  // ✅ Filter null/undefined
+          .map(c => c.fullName)
+          .join(', '),
+
+        coachEvaluations: (ev.coachIds || [])
+          .filter(c => c && c._id)  // ✅ Filter null
+          .map(c => ({
+            coachId: c._id.toString(),
+            coachName: c.fullName || 'Unknown',
+            attendance: ev.attendance,
+            notes: ev.notes
+          })),
+
         coachNotesHistory: (ev.coachNotes || []).map(cn => ({
           coachName: cn.coachName,
           notes: cn.notes,
@@ -497,13 +504,13 @@ exports.getCoachReport = async (req, res) => {
 
     // ==================== BUILD COACH MAP - FIXED: 3 TYPES ====================
     const coachMap = {};
-    
+
     normalizedSchedules.forEach((schedule) => {
       let coachsForThisSchedule = [];
 
       if (schedule.scheduleType === 'private' && schedule.coachId) {
         coachsForThisSchedule = [schedule.coachId];
-      } 
+      }
       else if (schedule.scheduleType === 'semiPrivate' && Array.isArray(schedule.coaches)) {
         coachsForThisSchedule = schedule.coaches;
       }
@@ -516,7 +523,7 @@ exports.getCoachReport = async (req, res) => {
 
         const coachObjectId = coach._id.toString();
         const coachKey = coach.coachId || coachObjectId;
-        
+
         if (!coachMap[coachKey]) {
           coachMap[coachKey] = {
             coachId: coachKey,
@@ -532,7 +539,7 @@ exports.getCoachReport = async (req, res) => {
         }
 
         coachMap[coachKey].totalSessions++;
-        
+
         if (schedule.status === 'completed') {
           coachMap[coachKey].completedSessions++;
         } else if (schedule.status === 'cancelled') {
@@ -829,16 +836,16 @@ exports.resetAllTrainingCount = async (req, res) => {
     const studentObjectId = new mongoose.Types.ObjectId(studentId);
 
     const allEvaluations = await TrainingEvaluation.find({ studentId: studentObjectId });
-    
+
     if (allEvaluations.length > 0) {
       const grouped = {};
-      
+
       allEvaluations.forEach(evaluation => {
         const date = new Date(evaluation.trainingDate);
         const year = date.getFullYear();
         const month = date.getMonth() + 1;
         const key = `${year}-${month}`;
-        
+
         if (!grouped[key]) {
           grouped[key] = [];
         }
