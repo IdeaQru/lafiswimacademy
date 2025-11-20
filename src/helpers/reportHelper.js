@@ -474,56 +474,166 @@ async function getFinancialExportData(startDate, endDate) {
 // ✅ PDF EXPORT
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
+/**
+ * ✅ COMPLETE: Export to PDF dengan margin global, header, footer, dan layout rapi
+ */
 async function exportToPDFBeautiful(res, title, data, reportType, startDate, endDate) {
   try {
-    const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
+    // ==================== KONFIGURASI PDF ====================
+    const margins = {
+      top: 50,
+      bottom: 60,    // ✅ Ruang untuk footer
+      left: 50,
+      right: 50
+    };
 
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: margins.top,
+      margins: margins,
+      bufferPages: true
+    });
+
+    // ==================== SET RESPONSE HEADERS ====================
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=laporan-${reportType}-${Date.now()}.pdf`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
     doc.pipe(res);
 
-    // Header
-    doc.rect(0, 0, doc.page.width, 100).fill('#0ea5e9');
-    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold')
-       .text('LAFI SWIMMING ACADEMY', 50, 20, { align: 'center' });
-    doc.fontSize(14).text(title, 50, 45, { align: 'center' });
-    doc.fontSize(9).font('Helvetica')
-       .text(`Periode: ${startDate || 'Semua'} s/d ${endDate || 'Semua'}`, 50, 65, { align: 'center' });
-    doc.text(`Dicetak: ${new Date().toLocaleDateString('id-ID')}`, 50, 78, { align: 'center' });
+    // ==================== HEADER ====================
+    const headerHeight = 95;
+    doc.rect(0, 0, doc.page.width, headerHeight).fill('#0ea5e9');
 
-    doc.moveDown(2).fillColor('#000000');
+    // Logo/Title area
+    doc.fillColor('#ffffff')
+       .fontSize(24)
+       .font('Helvetica-Bold')
+       .text('LAFI SWIMMING ACADEMY', margins.left, 15, { 
+         width: doc.page.width - margins.left - margins.right, 
+         align: 'center' 
+       });
 
+    // Report title
+    doc.fontSize(16)
+       .font('Helvetica-Bold')
+       .text(title, margins.left, 42, { 
+         width: doc.page.width - margins.left - margins.right, 
+         align: 'center' 
+       });
+
+    // Date range info
+    doc.fontSize(10)
+       .font('Helvetica')
+       .fillColor('#e0f2fe')
+       .text(
+         `Periode: ${startDate || 'Semua'} s/d ${endDate || 'Semua'}`,
+         margins.left,
+         65,
+         { width: doc.page.width - margins.left - margins.right, align: 'center' }
+       );
+
+    // Print date
+    doc.fontSize(9)
+       .fillColor('#cffafe')
+       .text(
+         `Dicetak: ${new Date().toLocaleDateString('id-ID', { 
+           weekday: 'long', 
+           year: 'numeric', 
+           month: 'long', 
+           day: 'numeric',
+           hour: '2-digit',
+           minute: '2-digit'
+         })}`,
+         margins.left,
+         78,
+         { width: doc.page.width - margins.left - margins.right, align: 'center' }
+       );
+
+    // Reset ke warna normal
+    doc.fillColor('#000000');
+
+    // ==================== CONTENT AREA ====================
+    doc.moveDown(3);
+
+    // Render content sesuai tipe report
     if (reportType === 'student-individual') {
-      await renderStudentPDF(doc, data);
+      await renderStudentPDF(doc, data, margins);
     } else if (reportType === 'coach') {
-      await renderCoachPDF(doc, data.coaches);
+      await renderCoachPDF(doc, data.coaches, margins);
     } else if (reportType === 'financial') {
-      await renderFinancialPDF(doc, data);
+      await renderFinancialPDF(doc, data, margins);
     }
 
-    // Footer
+    // ==================== FOOTER ====================
+    // ✅ Penting: Tambahkan footer SETELAH semua konten selesai
     const pages = doc.bufferedPageRange();
+    
     for (let i = 0; i < pages.count; i++) {
       doc.switchToPage(i);
-      doc.moveTo(50, doc.page.height - 45)
-        .lineTo(doc.page.width - 50, doc.page.height - 45)
-        .stroke('#e5e7eb');
-      doc.fontSize(8).fillColor('#6b7280')
-        .text(`Halaman ${i + 1} dari ${pages.count}`, 50, doc.page.height - 35, { 
-          align: 'center', 
-          width: doc.page.width - 100 
-        });
+
+      // Posisi footer dari bawah
+      const footerLineY = doc.page.height - margins.bottom - 15;
+      const footerTextY = doc.page.height - margins.bottom - 10;
+
+      // ✅ Garis pemisah footer
+      doc.strokeColor('#d1d5db')
+         .lineWidth(0.5)
+         .moveTo(margins.left, footerLineY)
+         .lineTo(doc.page.width - margins.right, footerLineY)
+         .stroke();
+
+      // ✅ Nomor halaman di tengah
+      doc.fontSize(8)
+         .fillColor('#6b7280')
+         .font('Helvetica')
+         .text(
+           `Halaman ${i + 1} dari ${pages.count}`,
+           margins.left,
+           footerTextY,
+           {
+             width: doc.page.width - margins.left - margins.right,
+             align: 'center'
+           }
+         );
+
+      // ✅ Info tambahan di kiri-kanan (optional)
+      doc.fontSize(7)
+         .fillColor('#9ca3af')
+         .text(
+           'LAFI Swimming Academy',
+           margins.left,
+           footerTextY - 10,
+           { width: doc.page.width - margins.left - margins.right, align: 'left' }
+         );
+
+      doc.fontSize(7)
+         .text(
+           `© ${new Date().getFullYear()}`,
+           margins.left,
+           footerTextY -10,
+           { width: doc.page.width - margins.left - margins.right, align: 'right' }
+         );
+
+      // Reset fillColor
+      doc.fillColor('#000000');
     }
 
+    // ==================== END DOCUMENT ====================
     doc.end();
+
   } catch (error) {
     console.error('❌ Error PDF:', error);
     if (!res.headersSent) {
-      res.status(500).json({ success: false, message: 'Error generating PDF' });
+      res.status(500).json({ 
+        success: false, 
+        message: 'Error generating PDF',
+        error: error.message 
+      });
     }
   }
 }
+
 
 // ==================== PDF RENDER: STUDENT ====================
 async function renderStudentPDF(doc, data) {
