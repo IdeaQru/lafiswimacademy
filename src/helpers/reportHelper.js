@@ -482,14 +482,13 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
     // ==================== KONFIGURASI PDF ====================
     const margins = {
       top: 50,
-      bottom: 60,    // ✅ Ruang untuk footer
+      bottom: 70,    // Ruang untuk footer
       left: 50,
       right: 50
     };
 
     const doc = new PDFDocument({
       size: 'A4',
-      margin: margins.top,
       margins: margins,
       bufferPages: true
     });
@@ -505,58 +504,52 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
     const headerHeight = 95;
     doc.rect(0, 0, doc.page.width, headerHeight).fill('#0ea5e9');
 
-    // Logo/Title area
     doc.fillColor('#ffffff')
-       .fontSize(24)
-       .font('Helvetica-Bold')
-       .text('LAFI SWIMMING ACADEMY', margins.left, 15, { 
-         width: doc.page.width - margins.left - margins.right, 
-         align: 'center' 
-       });
+      .fontSize(24)
+      .font('Helvetica-Bold')
+      .text('LAFI SWIMMING ACADEMY', margins.left, 15, {
+        width: doc.page.width - margins.left - margins.right,
+        align: 'center'
+      });
 
-    // Report title
     doc.fontSize(16)
-       .font('Helvetica-Bold')
-       .text(title, margins.left, 42, { 
-         width: doc.page.width - margins.left - margins.right, 
-         align: 'center' 
-       });
+      .font('Helvetica-Bold')
+      .text(title, margins.left, 42, {
+        width: doc.page.width - margins.left - margins.right,
+        align: 'center'
+      });
 
-    // Date range info
     doc.fontSize(10)
-       .font('Helvetica')
-       .fillColor('#e0f2fe')
-       .text(
-         `Periode: ${startDate || 'Semua'} s/d ${endDate || 'Semua'}`,
-         margins.left,
-         65,
-         { width: doc.page.width - margins.left - margins.right, align: 'center' }
-       );
+      .font('Helvetica')
+      .fillColor('#e0f2fe')
+      .text(
+        `Periode: ${startDate || 'Semua'} s/d ${endDate || 'Semua'}`,
+        margins.left,
+        65,
+        { width: doc.page.width - margins.left - margins.right, align: 'center' }
+      );
 
-    // Print date
     doc.fontSize(9)
-       .fillColor('#cffafe')
-       .text(
-         `Dicetak: ${new Date().toLocaleDateString('id-ID', { 
-           weekday: 'long', 
-           year: 'numeric', 
-           month: 'long', 
-           day: 'numeric',
-           hour: '2-digit',
-           minute: '2-digit'
-         })}`,
-         margins.left,
-         78,
-         { width: doc.page.width - margins.left - margins.right, align: 'center' }
-       );
+      .fillColor('#cffafe')
+      .text(
+        `Dicetak: ${new Date().toLocaleDateString('id-ID', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}`,
+        margins.left,
+        78,
+        { width: doc.page.width - margins.left - margins.right, align: 'center' }
+      );
 
-    // Reset ke warna normal
     doc.fillColor('#000000');
 
     // ==================== CONTENT AREA ====================
     doc.moveDown(3);
 
-    // Render content sesuai tipe report
     if (reportType === 'student-individual') {
       await renderStudentPDF(doc, data, margins);
     } else if (reportType === 'coach') {
@@ -566,78 +559,70 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
     }
 
     // ==================== FOOTER ====================
-    // ✅ Penting: Tambahkan footer SETELAH semua konten selesai
     const pages = doc.bufferedPageRange();
-    
+
     for (let i = 0; i < pages.count; i++) {
       doc.switchToPage(i);
 
-      // Posisi footer dari bawah
-      const footerLineY = doc.page.height - margins.bottom - 15;
+      const footerLineY = doc.page.height - margins.bottom  - 10;
       const footerTextY = doc.page.height - margins.bottom - 10;
 
-      // ✅ Garis pemisah footer
       doc.strokeColor('#d1d5db')
-         .lineWidth(0.5)
-         .moveTo(margins.left, footerLineY)
-         .lineTo(doc.page.width - margins.right, footerLineY)
-         .stroke();
+        .lineWidth(0.5)
+        .moveTo(margins.left, footerLineY)
+        .lineTo(doc.page.width - margins.right, footerLineY)
+        .stroke();
 
-      // ✅ Nomor halaman di tengah
       doc.fontSize(8)
-         .fillColor('#6b7280')
-         .font('Helvetica')
-         .text(
-           `Halaman ${i + 1} dari ${pages.count}`,
-           margins.left,
-           footerTextY,
-           {
-             width: doc.page.width - margins.left - margins.right,
-             align: 'center'
-           }
-         );
-
-      // ✅ Info tambahan di kiri-kanan (optional)
-      doc.fontSize(7)
-         .fillColor('#9ca3af')
-         .text(
-           'LAFI Swimming Academy',
-           margins.left,
-           footerTextY - 10,
-           { width: doc.page.width - margins.left - margins.right, align: 'left' }
-         );
+        .fillColor('#6b7280')
+        .font('Helvetica')
+        .text(
+          `Halaman ${i + 1} dari ${pages.count}`,
+          margins.left,
+          footerTextY,
+          {
+            width: doc.page.width - margins.left - margins.right,
+            align: 'center'
+          }
+        );
 
       doc.fontSize(7)
-         .text(
-           `© ${new Date().getFullYear()}`,
-           margins.left,
-           footerTextY -10,
-           { width: doc.page.width - margins.left - margins.right, align: 'right' }
-         );
+        .fillColor('#9ca3af')
+        .text(
+          'LAFI Swimming Academy',
+          margins.left,
+          footerTextY - 7,
+          { width: doc.page.width - margins.left - margins.right, align: 'left' }
+        );
 
-      // Reset fillColor
+      doc.fontSize(7)
+        .text(
+          `© ${new Date().getFullYear()}`,
+          margins.left,
+          footerTextY - 7,
+          { width: doc.page.width - margins.left - margins.right, align: 'right' }
+        );
+
       doc.fillColor('#000000');
     }
 
-    // ==================== END DOCUMENT ====================
     doc.end();
-
   } catch (error) {
     console.error('❌ Error PDF:', error);
     if (!res.headersSent) {
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         message: 'Error generating PDF',
-        error: error.message 
+        error: error.message
       });
     }
   }
 }
 
-
 // ==================== PDF RENDER: STUDENT ====================
-async function renderStudentPDF(doc, data) {
+async function renderStudentPDF(doc, data, margins) {
   let y = 125;
+  const safeOffset = 40;
 
   doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
     .fillAndStroke('#f0f9ff', '#0ea5e9');
@@ -662,9 +647,9 @@ async function renderStudentPDF(doc, data) {
   y += 18;
 
   data.history.forEach((item, i) => {
-    if (y > doc.page.height - 100) {
+    if (y > doc.page.height - margins.bottom - safeOffset) {
       doc.addPage();
-      y = 50;
+      y = margins.top;
     }
 
     const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
@@ -682,6 +667,173 @@ async function renderStudentPDF(doc, data) {
     y += 14;
   });
 }
+
+// ==================== PDF RENDER: COACH ====================
+async function renderCoachPDF(doc, coaches, margins) {
+  let y = 125;
+  const safeOffset = 40;
+
+  coaches.forEach(coach => {
+    if (y > doc.page.height - margins.bottom - safeOffset) {
+      doc.addPage();
+      y = margins.top;
+    }
+
+    doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
+      .fillAndStroke('#f0fdf4', '#10b981');
+    doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold')
+      .text(`${coach.name || coach.coachName || 'Unknown'} (${coach.id || coach.coachId || '-'})`, 70, y + 8);
+    doc.fontSize(8).fillColor('#6b7280').font('Helvetica')
+      .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 18);
+
+    y += 45;
+
+    if (coach.scheduleTypeStats && coach.scheduleTypeStats.length > 0) {
+      doc.fontSize(8).fillColor('#10b981').font('Helvetica-Bold')
+        .text('STATISTIK SCHEDULE TYPE:', 60, y);
+      y += 12;
+
+      doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981');
+      doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+        .text('Schedule Type (Kategori)', 60, y + 3, { width: 200 })
+        .text('Total', 265, y + 3, { width: 35 })
+        .text('Selesai', 305, y + 3, { width: 35 })
+        .text('Batal', 345, y + 3, { width: 35 });
+
+      y += 16;
+
+      coach.scheduleTypeStats.forEach((stat, i) => {
+        const bgColor = i % 2 === 0 ? '#f0fdf4' : '#ffffff';
+        doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
+
+        doc.fillColor('#000').fontSize(5.5).font('Helvetica')
+          .text(stat.typeKey || `${stat.scheduleType} (${stat.programCategory})`, 60, y + 2, { width: 200 })
+          .text(stat.total.toString(), 265, y + 2, { width: 35 })
+          .text(stat.completed.toString(), 305, y + 2, { width: 35 })
+          .text(stat.cancelled.toString(), 345, y + 2, { width: 35 });
+
+        y += 12;
+      });
+
+      y += 8;
+    }
+
+    if (coach.sessions && coach.sessions.length > 0) {
+      doc.fontSize(8).fillColor('#0369a1').font('Helvetica-Bold')
+        .text('DAFTAR SESI & EVALUASI SISWA:', 60, y);
+      y += 12;
+
+      coach.sessions.forEach(session => {
+        if (y > doc.page.height - margins.bottom - safeOffset) {
+          doc.addPage();
+          y = margins.top;
+        }
+
+        doc.rect(50, y, doc.page.width - 100, 14).fill('#e0f2fe');
+        doc.fillColor('#0369a1').fontSize(6.5).font('Helvetica-Bold')
+          .text(`${session.scheduleType} | ${new Date(session.date).toLocaleDateString('id-ID')} | ${session.time}`, 60, y + 3, { width: 300 })
+          .text(`${session.programCategory}`, 380, y + 3, { width: 165 });
+
+        y += 16;
+
+        doc.fillColor('#000').fontSize(6).font('Helvetica')
+          .text(`Program: ${session.program} | Lokasi: ${session.location}`, 60, y);
+        y += 10;
+
+        doc.fillColor('#0ea5e9').fontSize(6).font('Helvetica-Bold')
+          .text(`Siswa: ${Array.isArray(session.students) ? session.students.length : session.studentCount}`, 60, y);
+        y += 10;
+
+        if (session.evaluations && session.evaluations.length > 0) {
+          doc.rect(50, y, doc.page.width - 100, 12).fill('#10b981');
+          doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+            .text('Siswa', 60, y + 2, { width: 100 })
+            .text('Kehadiran', 165, y + 2, { width: 50 })
+            .text('Catatan', 220, y + 2, { width: 325 });
+
+          y += 14;
+
+          session.evaluations.forEach((athlete, aidx) => {
+            if (y > doc.page.height - margins.bottom - safeOffset) {
+              doc.addPage();
+              y = margins.top;
+            }
+
+            const bgColor = aidx % 2 === 0 ? '#f9fafb' : '#ffffff';
+            const noteLines = (athlete.notes || '').split('\n').length || 1;
+            const rowHeight = Math.max(12, noteLines * 8 + 2);
+
+            doc.rect(50, y, doc.page.width - 100, rowHeight).fill(bgColor);
+
+            doc.fillColor('#000').fontSize(5.5).font('Helvetica')
+              .text(athlete.studentName, 60, y + 2, { width: 100 })
+              .text(athlete.attendance, 165, y + 2, { width: 50 });
+
+            doc.fillColor('#000').fontSize(5.5).font('Helvetica')
+              .text(athlete.notes, 220, y + 2, {
+                width: 325,
+                height: rowHeight - 4,
+                align: 'left'
+              });
+
+            y += rowHeight;
+          });
+        }
+
+        y += 6;
+      });
+    }
+
+    y += 10;
+  });
+}
+
+// ==================== PDF RENDER: FINANCIAL ====================
+async function renderFinancialPDF(doc, data, margins) {
+  let y = 125;
+  const safeOffset = 40;
+
+  doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
+    .fillAndStroke('#fef3c7', '#f59e0b');
+  doc.fillColor('#f59e0b').fontSize(12).font('Helvetica-Bold')
+    .text(`Total Pendapatan: Rp ${data.totalRevenue.toLocaleString('id-ID')}`, 70, y + 10);
+  doc.fontSize(9).fillColor('#6b7280').font('Helvetica')
+    .text(`Total Transaksi: ${data.stats.totalPayments}`, 70, y + 28)
+    .text(`Lunas: ${data.stats.paidCount} | Pending: ${data.stats.pendingCount}`, 70, y + 42)
+    .text(`Rata-rata: Rp ${data.stats.averagePayment.toLocaleString('id-ID')}`, 70, y + 56);
+
+  y += 75;
+
+  doc.rect(50, y, doc.page.width - 100, 14).fill('#f59e0b');
+  doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+    .text('Tanggal', 60, y + 3, { width: 60 })
+    .text('Siswa', 125, y + 3, { width: 100 })
+    .text('Bulan', 230, y + 3, { width: 50 })
+    .text('Jumlah', 285, y + 3, { width: 60 })
+    .text('Metode', 350, y + 3, { width: 45 });
+
+  y += 16;
+
+  data.payments.slice(0, 50).forEach((p, i) => {
+    if (y > doc.page.height - margins.bottom - safeOffset) {
+      doc.addPage();
+      y = margins.top;
+    }
+
+    const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
+    doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
+
+    doc.fillColor('#000').fontSize(6).font('Helvetica')
+      .text(new Date(p.date).toLocaleDateString('id-ID'), 60, y + 2, { width: 60 })
+      .text(p.student, 125, y + 2, { width: 100, ellipsis: true })
+      .text(p.month, 230, y + 2, { width: 50 })
+      .text(`Rp ${p.amount.toLocaleString('id-ID')}`, 285, y + 2, { width: 60 })
+      .text(p.method, 350, y + 2, { width: 45 });
+
+    y += 12;
+  });
+}
+
 // backend/src/helpers/reportHelper.js
 
 
@@ -984,175 +1136,8 @@ async function generateStudentPDFToFile(studentId, startDate, endDate, outputPat
 
 // ==================== PDF RENDER: COACH - REMOVED SPECIALIZATION ====================
 // ==================== PDF RENDER: COACH - FIXED ENCODING ====================
-async function renderCoachPDF(doc, coaches) {
-  let y = 125;
-  coaches.forEach(coach => {
-    if (y > doc.page.height - 150) {
-      doc.addPage();
-      y = 50;
-    }
-
-    // ✅ Coach Header - NO EMOJI
-    doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
-      .fillAndStroke('#f0fdf4', '#10b981');
-    doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold')
-      .text(`${coach.name} (${coach.id})`, 70, y + 8);
-    doc.fontSize(8).fillColor('#6b7280').font('Helvetica')
-      .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 18);
-
-    y += 45;
-
-    // ✅ Schedule Type Stats - NO EMOJI
-    if (coach.scheduleTypeStats.length > 0) {
-      doc.fontSize(8).fillColor('#10b981').font('Helvetica-Bold')
-        .text('STATISTIK SCHEDULE TYPE:', 60, y); // ✅ NO EMOJI
-      y += 12;
-
-      doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981');
-      doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
-        .text('Schedule Type (Kategori)', 60, y + 3, { width: 200 })
-        .text('Total', 265, y + 3, { width: 35 })
-        .text('Selesai', 305, y + 3, { width: 35 })
-        .text('Batal', 345, y + 3, { width: 35 });
-
-      y += 16;
-
-      coach.scheduleTypeStats.forEach((stat, i) => {
-        console.log(stat);
-        const bgColor = i % 2 === 0 ? '#f0fdf4' : '#ffffff';
-        doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
-
-        doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-          .text(stat.typeKey, 60, y + 2, { width: 200 })
-          .text(stat.total.toString(), 265, y + 2, { width: 35 })
-          .text(stat.completed.toString(), 305, y + 2, { width: 35 })
-          .text(stat.cancelled.toString(), 345, y + 2, { width: 35 });
-
-        y += 12;
-      });
-
-      y += 8;
-    }
-
-    // ✅ Sessions - NO EMOJI
-    if (coach.sessions.length > 0) {
-      doc.fontSize(8).fillColor('#0369a1').font('Helvetica-Bold')
-        .text('DAFTAR SESI & EVALUASI SISWA:', 60, y); // ✅ NO EMOJI
-      y += 12;
-
-      coach.sessions.forEach(session => {
-        if (y > doc.page.height - 100) {
-          doc.addPage();
-          y = 50;
-        }
-
-        // Session Header
-        doc.rect(50, y, doc.page.width - 100, 14).fill('#e0f2fe');
-        doc.fillColor('#0369a1').fontSize(6.5).font('Helvetica-Bold')
-          .text(`${session.scheduleType} | ${new Date(session.date).toLocaleDateString('id-ID')} | ${session.time}`, 60, y + 3, { width: 300 })
-          .text(`${session.programCategory}`, 380, y + 3, { width: 165 });
-
-        y += 16;
-
-        doc.fillColor('#000').fontSize(6).font('Helvetica')
-          .text(`Program: ${session.program} | Lokasi: ${session.location}`, 60, y);
-        y += 10;
-
-        doc.fillColor('#0ea5e9').fontSize(6).font('Helvetica-Bold')
-          .text(`Siswa: ${session.students}`, 60, y);
-        y += 10;
-
-        // Evaluations
-        if (session.evaluations && session.evaluations.length > 0) {
-          doc.rect(50, y, doc.page.width - 100, 12).fill('#10b981');
-          doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
-            .text('Siswa', 60, y + 2, { width: 100 })
-            .text('Kehadiran', 165, y + 2, { width: 50 })
-            .text('Catatan', 220, y + 2, { width: 325 });
-
-          y += 14;
-
-          session.evaluations.forEach((athlete, aidx) => {
-            if (y > doc.page.height - 40) {
-              doc.addPage();
-              y = 50;
-            }
-
-            const bgColor = aidx % 2 === 0 ? '#f9fafb' : '#ffffff';
-            const noteLines = (athlete.notes || '').split('\\n').length || 1;
-            const rowHeight = Math.max(12, noteLines * 8 + 2);
-
-            doc.rect(50, y, doc.page.width - 100, rowHeight).fill(bgColor);
-
-            doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-              .text(athlete.studentName, 60, y + 2, { width: 100 })
-              .text(athlete.attendance, 165, y + 2, { width: 50 });
-
-            doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-              .text(athlete.notes, 220, y + 2, { 
-                width: 325,
-                height: rowHeight - 4,
-                align: 'left',
-                ellipsis: false
-              });
-
-            y += rowHeight;
-          });
-        }
-
-        y += 6;
-      });
-    }
-
-    y += 10;
-  });
-}
 
 
-// ==================== PDF RENDER: FINANCIAL ====================
-async function renderFinancialPDF(doc, data) {
-  let y = 125;
-
-  doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
-    .fillAndStroke('#fef3c7', '#f59e0b');
-  doc.fillColor('#f59e0b').fontSize(12).font('Helvetica-Bold')
-    .text(`Total Pendapatan: Rp ${data.totalRevenue.toLocaleString('id-ID')}`, 70, y + 10);
-  doc.fontSize(9).fillColor('#6b7280').font('Helvetica')
-    .text(`Total Transaksi: ${data.stats.totalPayments}`, 70, y + 28)
-    .text(`Lunas: ${data.stats.paidCount} | Pending: ${data.stats.pendingCount}`, 70, y + 42)
-    .text(`Rata-rata: Rp ${data.stats.averagePayment.toLocaleString('id-ID')}`, 70, y + 56);
-
-  y += 75;
-
-  doc.rect(50, y, doc.page.width - 100, 14).fill('#f59e0b');
-  doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
-    .text('Tanggal', 60, y + 3, { width: 60 })
-    .text('Siswa', 125, y + 3, { width: 100 })
-    .text('Bulan', 230, y + 3, { width: 50 })
-    .text('Jumlah', 285, y + 3, { width: 60 })
-    .text('Metode', 350, y + 3, { width: 45 });
-
-  y += 16;
-
-  data.payments.slice(0, 50).forEach((p, i) => {
-    if (y > doc.page.height - 40) {
-      doc.addPage();
-      y = 50;
-    }
-
-    const bgColor = i % 2 === 0 ? '#f9fafb' : '#ffffff';
-    doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
-
-    doc.fillColor('#000').fontSize(6).font('Helvetica')
-      .text(new Date(p.date).toLocaleDateString('id-ID'), 60, y + 2, { width: 60 })
-      .text(p.student, 125, y + 2, { width: 100, ellipsis: true })
-      .text(p.month, 230, y + 2, { width: 50 })
-      .text(`Rp ${p.amount.toLocaleString('id-ID')}`, 285, y + 2, { width: 60 })
-      .text(p.method, 350, y + 2, { width: 45 });
-
-    y += 12;
-  });
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ EXCEL EXPORT
