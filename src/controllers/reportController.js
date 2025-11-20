@@ -1126,12 +1126,12 @@ exports.generateAndSendStudentPDFLinkToWhatsApp = async (req, res) => {
     const { id } = req.params;
     const { startDate, endDate, message } = req.body;
 
-    console.log('\n' + '='.repeat(80));
-    console.log('📱 GENERATE PDF & SEND LINK TO WHATSAPP');
-    console.log('='.repeat(80));
-    console.log('   Student ID:', id);
-    console.log('   Date range:', { startDate, endDate });
-    console.log('   Custom message:', message ? 'Yes' : 'No');
+    // console.log('\n' + '='.repeat(80));
+    // console.log('📱 GENERATE PDF & SEND LINK TO WHATSAPP');
+    // console.log('='.repeat(80));
+    // console.log('   Student ID:', id);
+    // console.log('   Date range:', { startDate, endDate });
+    // console.log('   Custom message:', message ? 'Yes' : 'No');
 
     // ==================== GET STUDENT ====================
     const student = await Student.findById(id);
@@ -1218,7 +1218,7 @@ exports.generateAndSendStudentPDFLinkToWhatsApp = async (req, res) => {
     // ==================== FORMAT WHATSAPP MESSAGE ====================
     const whatsappMessage = message || 
       `Halo ${student.fullName}! 👋\n\n` +
-      `Berikut adalah laporan riwayat latihan Anda di Lafi Swimming Academy.\n\n` +
+      `Berikut adalah laporan riwayat latihan {${student.shortName}} di Lafi Swimming Academy.\n\n` +
       `📊 *Statistik Latihan:*\n` +
       `📅 Periode: ${startDate ? new Date(startDate).toLocaleDateString('id-ID') : 'Semua'} - ${endDate ? new Date(endDate).toLocaleDateString('id-ID') : 'Semua'}\n` +
       `✅ Total Sesi: ${result.stats.total}\n` +
@@ -1227,7 +1227,7 @@ exports.generateAndSendStudentPDFLinkToWhatsApp = async (req, res) => {
       `📝 Izin: ${result.stats.izin}\n` +
       `🏥 Sakit: ${result.stats.sakit}\n` +
       `📈 Tingkat Kehadiran: ${result.stats.attendanceRate}%\n\n` +
-      `📄 *Download Laporan PDF:*\n` +
+      `📄 *Download Laporan Perkembangan Bulanan PDF:*\n` +
       `${publicUrl}\n\n` +
       `⏰ *Link berlaku hingga:*\n` +
       `${expiryTimeStr} WIB\n\n` +
