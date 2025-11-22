@@ -16,17 +16,21 @@ const formatReminder24Hours = (schedule) => {
     day: 'numeric'
   });
 
+  // ✅ Safe fallback untuk coach & student name
+  const coachName = schedule.coachId?.fullName || schedule.coachName || 'Coach';
+  const studentName = schedule.studentId?.fullName || schedule.studentName || 'Siswa';
+
   // ============ PRIVATE ============
   if (schedule.scheduleType === 'private') {
     return `👨‍🏫 *Pengingat Jadwal Mengajar (H-1) - Lafi Swimming Academy*
 
-Halo Coach ${schedule.coachName}! 👋
+Halo Coach ${coachName}! 👋
 
 Pengingat jadwal mengajar Anda *BESOK*:
 
 📅 *Tanggal:* ${formattedDate}
 ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
-👨‍🎓 *Siswa:* ${schedule.studentName}
+👨‍🎓 *Siswa:* ${studentName}
 🏊 *Program:* ${schedule.program}
 📍 *Lokasi:* ${schedule.location}
 📝 *Tipe:* Private (1-on-1)
@@ -43,13 +47,13 @@ Terima kasih! 💪
   // ============ SEMI-PRIVATE ============
   else if (schedule.scheduleType === 'semiPrivate') {
     const studentList = schedule.students
-      ?.map(s => `• ${s.fullName}`)
+      ?.map(s => `• ${s.fullName || s.name || 'Siswa'}`)
       .join('\n') || '• (Siswa tidak tersedia)';
     const studentCount = schedule.students?.length || 0;
 
     return `👨‍🏫 *Pengingat Semi-Private Class (H-1) - Lafi Swimming Academy*
 
-Halo Coach ${schedule.coachName}! 👋
+Halo Coach ${coachName}! 👋
 
 Pengingat semi-private class Anda *BESOK*:
 
@@ -74,12 +78,12 @@ Terima kasih! 💪
   // ============ GROUP ============
   else {
     const studentList = schedule.students
-      ?.map(s => `• ${s.fullName}`)
+      ?.map(s => `• ${s.fullName || s.name || 'Siswa'}`)
       .join('\n') || '• (Siswa tidak tersedia)';
     const studentCount = schedule.students?.length || 0;
     const coachList = schedule.coaches
-      ?.map(c => c.fullName)
-      .join(', ') || 'Unknown';
+      ?.map(c => c.fullName || c.name || 'Coach')
+      .join(', ') || 'Team';
 
     return `👨‍🏫 *Pengingat Group Class (H-1) - Lafi Swimming Academy*
 
@@ -119,17 +123,21 @@ const formatReminder1Hour = (schedule) => {
     day: 'numeric'
   });
 
+  // ✅ Safe fallback untuk coach & student name
+  const coachName = schedule.coachId?.fullName || schedule.coachName || 'Coach';
+  const studentName = schedule.studentId?.fullName || schedule.studentName || 'Siswa';
+
   // ============ PRIVATE ============
   if (schedule.scheduleType === 'private') {
     return `⏰ *Pengingat Jadwal Mengajar (1 Jam Lagi!) - Lafi Swimming Academy*
 
-Halo Coach ${schedule.coachName}! 👋
+Halo Coach ${coachName}! 👋
 
 ⚠️ *PENGINGAT: Jadwal mengajar Anda 1 JAM LAGI!*
 
 📅 *Tanggal:* ${formattedDate}
 ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
-👨‍🎓 *Siswa:* ${schedule.studentName}
+👨‍🎓 *Siswa:* ${studentName}
 🏊 *Program:* ${schedule.program}
 📍 *Lokasi:* ${schedule.location}
 📝 *Tipe:* Private (1-on-1)
@@ -144,13 +152,13 @@ Semangat mengajar! 💪
   // ============ SEMI-PRIVATE ============
   else if (schedule.scheduleType === 'semiPrivate') {
     const studentList = schedule.students
-      ?.map(s => `• ${s.fullName}`)
+      ?.map(s => `• ${s.fullName || s.name || 'Siswa'}`)
       .join('\n') || '• (Siswa tidak tersedia)';
     const studentCount = schedule.students?.length || 0;
 
     return `⏰ *Pengingat Semi-Private Class (1 Jam Lagi!) - Lafi Swimming Academy*
 
-Halo Coach ${schedule.coachName}! 👋
+Halo Coach ${coachName}! 👋
 
 ⚠️ *PENGINGAT: Semi-private class Anda 1 JAM LAGI!*
 
@@ -173,12 +181,12 @@ Semangat mengajar! 💪
   // ============ GROUP ============
   else {
     const studentList = schedule.students
-      ?.map(s => `• ${s.fullName}`)
+      ?.map(s => `• ${s.fullName || s.name || 'Siswa'}`)
       .join('\n') || '• (Siswa tidak tersedia)';
     const studentCount = schedule.students?.length || 0;
     const coachList = schedule.coaches
-      ?.map(c => c.fullName)
-      .join(', ') || 'Unknown';
+      ?.map(c => c.fullName || c.name || 'Coach')
+      .join(', ') || 'Team';
 
     return `⏰ *Pengingat Group Class (1 Jam Lagi!) - Lafi Swimming Academy*
 
@@ -212,8 +220,17 @@ const sendToCoaches = async (schedule, message, reminderType) => {
 
   // ============ PRIVATE / SEMI-PRIVATE ============
   if (schedule.scheduleType === 'private' || schedule.scheduleType === 'semiPrivate') {
-    const coachPhone = schedule.coachPhone;
-    const coachName = schedule.coachName;
+    // ✅ PRIORITAS: populated > direct field > coaches array
+    const coachPhone = 
+      schedule.coachId?.phone || 
+      schedule.coachPhone || 
+      schedule.coaches?.[0]?.phone;
+    
+    const coachName = 
+      schedule.coachId?.fullName || 
+      schedule.coachName || 
+      schedule.coaches?.[0]?.fullName || 
+      'Coach';
 
     if (coachPhone) {
       recipients = [{
@@ -224,11 +241,10 @@ const sendToCoaches = async (schedule, message, reminderType) => {
   }
   // ============ GROUP ============
   else if (schedule.scheduleType === 'group') {
-    // ✅ Send to ALL coaches in the group
     recipients = (schedule.coaches || [])
       .filter(c => c.phone)
       .map(c => ({
-        name: c.fullName,
+        name: c.fullName || c.name || 'Coach',
         phone: c.phone
       }));
   }
@@ -260,7 +276,6 @@ const sendToCoaches = async (schedule, message, reminderType) => {
       successCount++;
       console.log(`   ✅ Sent to ${recipient.name} (${recipient.phone})`);
 
-      // Delay 2 seconds between messages
       await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
       failCount++;
@@ -282,7 +297,6 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
     console.log('   Time:', new Date().toLocaleString('id-ID'));
     console.log('='.repeat(60));
 
-    // Check WhatsApp status
     if (!whatsappService.isReady()) {
       console.log('⚠️  WhatsApp service is not ready');
       console.log('   Status:', whatsappService.status);
@@ -293,7 +307,6 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
 
     console.log('✅ WhatsApp service is ready');
 
-    // Calculate time window
     const now = new Date();
     const reminderTime = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const reminderTimeStart = new Date(reminderTime.getTime() - 30 * 60 * 1000);
@@ -304,7 +317,7 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
     console.log('   Window start:', reminderTimeStart.toLocaleString('id-ID'));
     console.log('   Window end:', reminderTimeEnd.toLocaleString('id-ID'));
 
-    // Find schedules
+    // ✅ POPULATE DATA!
     const schedules = await Schedule.find({
       date: {
         $gte: reminderTimeStart,
@@ -313,7 +326,11 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
       reminderEnabled: true,
       reminderSent: false,
       status: 'scheduled'
-    });
+    })
+    .populate('coachId', '_id fullName phone')
+    .populate('studentId', '_id fullName')
+    .populate('students', '_id fullName phone')
+    .populate('coaches._id', '_id fullName phone');
 
     console.log(`📋 Found ${schedules.length} schedule(s) for 24-hour reminder`);
     console.log(`   Private: ${schedules.filter(s => s.scheduleType === 'private').length}`);
@@ -326,7 +343,6 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
       return;
     }
 
-    // Process each schedule
     let totalSuccess = 0;
     let totalFailed = 0;
 
@@ -341,10 +357,7 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
       console.log('   Time:', `${schedule.startTime} - ${schedule.endTime}`);
 
       try {
-        // Format message based on schedule type
         const message = formatReminder24Hours(schedule);
-
-        // ✅ Send to coach(es)
         const result = await sendToCoaches(schedule, message, '24h');
 
         totalSuccess += result.successCount;
@@ -352,7 +365,6 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
 
         console.log(`   📊 Result: ${result.successCount}/${result.totalRecipients} sent`);
 
-        // Mark as sent
         schedule.reminderSent = true;
         schedule.reminderSentAt = new Date();
         await schedule.save();
@@ -365,7 +377,6 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
       }
     }
 
-    // Summary
     console.log('');
     console.log('='.repeat(60));
     console.log('📊 24-HOUR REMINDER JOB SUMMARY:');
@@ -388,7 +399,7 @@ const reminder24Hours = cron.schedule('0 * * * *', async () => {
 });
 
 // ==========================================
-// CRON JOB: REMINDER 1 JAM SEBELUMNYA
+// CRON JOB: REMINDER 1 JAM SEBELUMNYA - FIXED!
 // ==========================================
 const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
   try {
@@ -398,7 +409,6 @@ const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
     console.log('   Time:', new Date().toLocaleString('id-ID'));
     console.log('='.repeat(60));
 
-    // Check WhatsApp status
     if (!whatsappService.isReady()) {
       console.log('⚠️  WhatsApp service is not ready');
       console.log('   Status:', whatsappService.status);
@@ -409,27 +419,38 @@ const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
 
     console.log('✅ WhatsApp service is ready');
 
-    // Calculate time window
+    // ✅ FIX: Query date + startTime separately
     const now = new Date();
-    const reminderTime = new Date(now.getTime() + 60 * 60 * 1000);
-    const reminderTimeStart = new Date(reminderTime.getTime() - 10 * 60 * 1000);
-    const reminderTimeEnd = new Date(reminderTime.getTime() + 10 * 60 * 1000);
+    const targetTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 jam dari sekarang
+    
+    // Tanggal target (00:00:00)
+    const targetDate = new Date(targetTime.getFullYear(), targetTime.getMonth(), targetTime.getDate(), 0, 0, 0);
+    
+    // Window waktu ±10 menit dalam format HH:mm
+    const targetMinutes = targetTime.getHours() * 60 + targetTime.getMinutes();
+    const windowStartMin = targetMinutes - 10;
+    const windowEndMin = targetMinutes + 10;
+    
+    const startTimeStart = `${Math.floor(windowStartMin / 60).toString().padStart(2, '0')}:${(windowStartMin % 60).toString().padStart(2, '0')}`;
+    const startTimeEnd = `${Math.floor(windowEndMin / 60).toString().padStart(2, '0')}:${(windowEndMin % 60).toString().padStart(2, '0')}`;
 
     console.log('📊 Search parameters:');
-    console.log('   Target time:', reminderTime.toLocaleString('id-ID'));
-    console.log('   Window start:', reminderTimeStart.toLocaleString('id-ID'));
-    console.log('   Window end:', reminderTimeEnd.toLocaleString('id-ID'));
+    console.log('   Target time:', targetTime.toLocaleString('id-ID'));
+    console.log('   Date:', targetDate.toLocaleDateString('id-ID'));
+    console.log('   Start time window:', `${startTimeStart} - ${startTimeEnd}`);
 
-    // Find schedules
+    // ✅ QUERY BENAR: date + startTime + POPULATE
     const schedules = await Schedule.find({
-      date: {
-        $gte: reminderTimeStart,
-        $lte: reminderTimeEnd
-      },
+      date: targetDate,
+      startTime: { $gte: startTimeStart, $lte: startTimeEnd },
       reminderEnabled: true,
-      reminderSent: true, // Already sent 24h reminder
+      reminderSent: true,
       status: 'scheduled'
-    });
+    })
+    .populate('coachId', '_id fullName phone')
+    .populate('studentId', '_id fullName')
+    .populate('students', '_id fullName phone')
+    .populate('coaches._id', '_id fullName phone');
 
     console.log(`📋 Found ${schedules.length} schedule(s) for 1-hour reminder`);
 
@@ -439,7 +460,6 @@ const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
       return;
     }
 
-    // Process each schedule
     let totalSuccess = 0;
     let totalFailed = 0;
     let skippedCount = 0;
@@ -455,14 +475,13 @@ const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
       console.log('   Time:', `${schedule.startTime} - ${schedule.endTime}`);
 
       try {
-        // Check timing window
+        // ✅ Check 22-25 hour window
         const reminderSentAt = new Date(schedule.reminderSentAt);
         const hoursSinceReminder = (now - reminderSentAt) / (1000 * 60 * 60);
 
         console.log('   First reminder sent:', reminderSentAt.toLocaleString('id-ID'));
         console.log('   Hours since first reminder:', hoursSinceReminder.toFixed(2));
 
-        // Only send if between 22-25 hours since first reminder
         if (hoursSinceReminder < 22 || hoursSinceReminder > 25) {
           console.log('   ⏭️  Not in 1-hour reminder window (need 22-25 hours gap)');
           console.log('   Skipping...');
@@ -470,10 +489,7 @@ const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
           continue;
         }
 
-        // Format message based on schedule type
         const message = formatReminder1Hour(schedule);
-
-        // ✅ Send to coach(es)
         const result = await sendToCoaches(schedule, message, '1h');
 
         totalSuccess += result.successCount;
@@ -481,7 +497,6 @@ const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
 
         console.log(`   📊 Result: ${result.successCount}/${result.totalRecipients} sent`);
 
-        // Update last reminder time
         schedule.reminderSentAt = new Date();
         await schedule.save();
 
@@ -493,7 +508,6 @@ const reminder1Hour = cron.schedule('*/15 * * * *', async () => {
       }
     }
 
-    // Summary
     console.log('');
     console.log('='.repeat(60));
     console.log('📊 1-HOUR REMINDER JOB SUMMARY:');
@@ -535,15 +549,12 @@ console.log('');
 console.log('⏰ 1-Hour Reminder:');
 console.log('   Schedule: Every 15 minutes (*/15 * * * *)');
 console.log('   Runs at: 00, 15, 30, 45 minutes of every hour');
-console.log('   Window: ±10 minutes');
+console.log('   Window: ±10 minutes from target schedule time');
 console.log('   Condition: 22-25 hours after first reminder');
 console.log('   Support: private, semiPrivate, group');
 console.log('='.repeat(60));
 console.log('');
 
-// ==========================================
-// EXPORT CRON JOBS
-// ==========================================
 module.exports = {
   reminder24Hours,
   reminder1Hour
