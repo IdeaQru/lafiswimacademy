@@ -208,114 +208,114 @@ Terima kasih! 💪
  * ✅ Format confirmation message untuk coach (support 3 types)
  * COMPLETE FIXED - No more undefined!
  */
-const formatConfirmationMessage = (schedule) => {
-  const formattedDate = formatDateForMessage(schedule.date);
+// const formatConfirmationMessage = (schedule) => {
+//   const formattedDate = formatDateForMessage(schedule.date);
 
-  // ============ PRIVATE ============
-  if (schedule.scheduleType === 'private') {
-    const coachName = 
-      schedule.coachId?.fullName || 
-      schedule.coachName || 
-      schedule.coaches?.[0]?.fullName || 
-      'Coach';
+//   // ============ PRIVATE ============
+//   if (schedule.scheduleType === 'private') {
+//     const coachName = 
+//       schedule.coachId?.fullName || 
+//       schedule.coachName || 
+//       schedule.coaches?.[0]?.fullName || 
+//       'Coach';
 
-    const studentName = 
-      schedule.studentId?.fullName || 
-      schedule.studentName || 
-      schedule.students?.[0]?.fullName || 
-      'Siswa';
+//     const studentName = 
+//       schedule.studentId?.fullName || 
+//       schedule.studentName || 
+//       schedule.students?.[0]?.fullName || 
+//       'Siswa';
 
-    return `✅ *Jadwal Mengajar Baru - Lafi Swimming Academy*
+//     return `✅ *Jadwal Mengajar Baru - Lafi Swimming Academy*
 
-Halo Coach ${coachName}! 👋
+// Halo Coach ${coachName}! 👋
 
-Anda dijadwalkan untuk mengajar:
+// Anda dijadwalkan untuk mengajar:
 
-📅 *Tanggal:* ${formattedDate}
-⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
-👨‍🎓 *Siswa:* ${studentName}
-🏊 *Program:* ${schedule.program || 'Private Training'}
-${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location || 'Kolam Utama'}
-📝 *Tipe:* Private (1-on-1)
+// 📅 *Tanggal:* ${formattedDate}
+// ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
+// 👨‍🎓 *Siswa:* ${studentName}
+// 🏊 *Program:* ${schedule.program || 'Private Training'}
+// ${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location || 'Kolam Utama'}
+// 📝 *Tipe:* Private (1-on-1)
 
-Anda akan menerima pengingat 24 jam sebelum jadwal.
+// Anda akan menerima pengingat 24 jam sebelum jadwal.
 
-Terima kasih! 💪
-*Lafi Swimming Academy*
-📱 WA: 0821-4004-4677`;
-  }
+// Terima kasih! 💪
+// *Lafi Swimming Academy*
+// 📱 WA: 0821-4004-4677`;
+//   }
 
-  // ============ SEMI-PRIVATE ============
-  else if (schedule.scheduleType === 'semiPrivate') {
-    const coachName = 
-      schedule.coachId?.fullName || 
-      schedule.coachName || 
-      schedule.coaches?.[0]?.fullName || 
-      'Coach';
+//   // ============ SEMI-PRIVATE ============
+//   else if (schedule.scheduleType === 'semiPrivate') {
+//     const coachName = 
+//       schedule.coachId?.fullName || 
+//       schedule.coachName || 
+//       schedule.coaches?.[0]?.fullName || 
+//       'Coach';
 
-    const studentList = (schedule.students || [])
-      .map(s => `• ${s.fullName || s.studentName || s.name || 'Siswa'}`)
-      .join('\n') || '• (Siswa tidak tersedia)';
+//     const studentList = (schedule.students || [])
+//       .map(s => `• ${s.fullName || s.studentName || s.name || 'Siswa'}`)
+//       .join('\n') || '• (Siswa tidak tersedia)';
     
-    const studentCount = schedule.students?.length || 0;
+//     const studentCount = schedule.students?.length || 0;
 
-    return `✅ *Semi-Private Class Baru - Lafi Swimming Academy*
+//     return `✅ *Semi-Private Class Baru - Lafi Swimming Academy*
 
-Halo Coach ${coachName}! 👋
+// Halo Coach ${coachName}! 👋
 
-Anda ditambahkan ke semi-private class:
+// Anda ditambahkan ke semi-private class:
 
-📝 *Group:* ${schedule.groupName || 'Semi-Private'}
-📅 *Tanggal:* ${formattedDate}
-⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
-👨‍🎓 *Siswa (${studentCount}):*
-${studentList}
-🏊 *Program:* ${schedule.program || 'Semi Private Training'}
-${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location || 'Kolam Utama'}
-📝 *Tipe:* Semi-Private (1:${studentCount})
+// 📝 *Group:* ${schedule.groupName || 'Semi-Private'}
+// 📅 *Tanggal:* ${formattedDate}
+// ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
+// 👨‍🎓 *Siswa (${studentCount}):*
+// ${studentList}
+// 🏊 *Program:* ${schedule.program || 'Semi Private Training'}
+// ${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location || 'Kolam Utama'}
+// 📝 *Tipe:* Semi-Private (1:${studentCount})
 
-Anda akan menerima pengingat 24 jam sebelum jadwal.
+// Anda akan menerima pengingat 24 jam sebelum jadwal.
 
-Terima kasih! 💪
-*Lafi Swimming Academy*
-📱 WA: 0821-4004-4677`;
-  }
+// Terima kasih! 💪
+// *Lafi Swimming Academy*
+// 📱 WA: 0821-4004-4677`;
+//   }
 
-  // ============ GROUP ============
-  else {
-    const studentList = (schedule.students || [])
-      .map(s => `• ${s.fullName || s.studentName || s.name || 'Siswa'}`)
-      .join('\n') || '• (Siswa tidak tersedia)';
+//   // ============ GROUP ============
+//   else {
+//     const studentList = (schedule.students || [])
+//       .map(s => `• ${s.fullName || s.studentName || s.name || 'Siswa'}`)
+//       .join('\n') || '• (Siswa tidak tersedia)';
     
-    const studentCount = schedule.students?.length || 0;
+//     const studentCount = schedule.students?.length || 0;
     
-    const coachList = (schedule.coaches || [])
-      .map(c => c.fullName || c.coachName || c.name || 'Coach')
-      .join(', ') || 'Unknown';
+//     const coachList = (schedule.coaches || [])
+//       .map(c => c.fullName || c.coachName || c.name || 'Coach')
+//       .join(', ') || 'Unknown';
 
-    return `✅ *Group Class Baru - Lafi Swimming Academy*
+//     return `✅ *Group Class Baru - Lafi Swimming Academy*
 
-Halo Coach! 👋
+// Halo Coach! 👋
 
-Anda ditambahkan ke group class baru:
+// Anda ditambahkan ke group class baru:
 
-📝 *Group:* ${schedule.groupName || 'Group'}
-📅 *Tanggal:* ${formattedDate}
-⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
-👨‍🏫 *Pelatih:* ${coachList}
-👨‍🎓 *Siswa (${studentCount}):*
-${studentList}
-🏊 *Program:* ${schedule.program || 'Group Training'}
-${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location || 'Kolam Utama'}
-📝 *Tipe:* Group Class
+// 📝 *Group:* ${schedule.groupName || 'Group'}
+// 📅 *Tanggal:* ${formattedDate}
+// ⏰ *Waktu:* ${schedule.startTime} - ${schedule.endTime}
+// 👨‍🏫 *Pelatih:* ${coachList}
+// 👨‍🎓 *Siswa (${studentCount}):*
+// ${studentList}
+// 🏊 *Program:* ${schedule.program || 'Group Training'}
+// ${schedule.programCategory ? `📂 *Kategori:* ${schedule.programCategory}\n` : ''}📍 *Lokasi:* ${schedule.location || 'Kolam Utama'}
+// 📝 *Tipe:* Group Class
 
-Anda akan menerima pengingat 24 jam sebelum jadwal.
+// Anda akan menerima pengingat 24 jam sebelum jadwal.
 
-Terima kasih! 💪
-*Lafi Swimming Academy*
-📱 WA: 0821-4004-4677`;
-  }
-};
+// Terima kasih! 💪
+// *Lafi Swimming Academy*
+// 📱 WA: 0821-4004-4677`;
+//   }
+// };
 
 // ==================== HELPERS ====================
 
@@ -951,136 +951,136 @@ exports.toggleReminder = async (req, res) => {
 /**
  * ✅ Send WhatsApp reminder manually
  */
-exports.sendWhatsAppReminder = async (req, res) => {
-  try {
-    console.log('📱 POST /schedules/:id/send-whatsapp-reminder');
+// exports.sendWhatsAppReminder = async (req, res) => {
+//   try {
+//     console.log('📱 POST /schedules/:id/send-whatsapp-reminder');
 
-    const schedule = await Schedule.findById(req.params.id)
-      .populate('studentId', 'fullName')
-      .populate('coachId', 'fullName phone')
-      .populate('students', 'fullName')
-      .populate('coaches._id', 'fullName phone')
-      .lean();
+//     const schedule = await Schedule.findById(req.params.id)
+//       .populate('studentId', 'fullName')
+//       .populate('coachId', 'fullName phone')
+//       .populate('students', 'fullName')
+//       .populate('coaches._id', 'fullName phone')
+//       .lean();
 
-    if (!schedule) {
-      return res.status(404).json({
-        success: false,
-        message: 'Schedule not found'
-      });
-    }
+//     if (!schedule) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Schedule not found'
+//       });
+//     }
 
-    if (!whatsappService.isReady()) {
-      return res.status(503).json({
-        success: false,
-        message: 'WhatsApp service is not ready'
-      });
-    }
+//     if (!whatsappService.isReady()) {
+//       return res.status(503).json({
+//         success: false,
+//         message: 'WhatsApp service is not ready'
+//       });
+//     }
 
-    let recipients = [];
-    let message = '';
+//     let recipients = [];
+//     let message = '';
 
-    if (schedule.scheduleType === 'private') {
-      const coachPhone =
-        schedule.coachId?.phone ||
-        schedule.coachPhone ||
-        schedule.coaches?.[0]?.phone;
+//     if (schedule.scheduleType === 'private') {
+//       const coachPhone =
+//         schedule.coachId?.phone ||
+//         schedule.coachPhone ||
+//         schedule.coaches?.[0]?.phone;
 
-      const coachName =
-        schedule.coachId?.fullName ||
-        schedule.coachName ||
-        schedule.coaches?.[0]?.fullName ||
-        'Coach';
+//       const coachName =
+//         schedule.coachId?.fullName ||
+//         schedule.coachName ||
+//         schedule.coaches?.[0]?.fullName ||
+//         'Coach';
 
-      if (!coachPhone) {
-        return res.status(400).json({
-          success: false,
-          message: 'Nomor HP coach tidak tersedia'
-        });
-      }
+//       if (!coachPhone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: 'Nomor HP coach tidak tersedia'
+//         });
+//       }
 
-      recipients = [{
-        name: coachName,
-        phone: coachPhone,
-        type: 'coach'
-      }];
+//       recipients = [{
+//         name: coachName,
+//         phone: coachPhone,
+//         type: 'coach'
+//       }];
 
-      message = formatPrivateReminderMessage(schedule);
-    }
-    else if (schedule.scheduleType === 'semiPrivate') {
-      const coachPhone =
-        schedule.coachId?.phone ||
-        schedule.coachPhone ||
-        schedule.coaches?.[0]?.phone;
+//       message = formatPrivateReminderMessage(schedule);
+//     }
+//     else if (schedule.scheduleType === 'semiPrivate') {
+//       const coachPhone =
+//         schedule.coachId?.phone ||
+//         schedule.coachPhone ||
+//         schedule.coaches?.[0]?.phone;
 
-      const coachName =
-        schedule.coachId?.fullName ||
-        schedule.coachName ||
-        schedule.coaches?.[0]?.fullName ||
-        'Coach';
+//       const coachName =
+//         schedule.coachId?.fullName ||
+//         schedule.coachName ||
+//         schedule.coaches?.[0]?.fullName ||
+//         'Coach';
 
-      if (!coachPhone) {
-        return res.status(400).json({
-          success: false,
-          message: 'Nomor HP coach tidak tersedia'
-        });
-      }
+//       if (!coachPhone) {
+//         return res.status(400).json({
+//           success: false,
+//           message: 'Nomor HP coach tidak tersedia'
+//         });
+//       }
 
-      recipients = [{
-        name: coachName,
-        phone: coachPhone,
-        type: 'coach'
-      }];
+//       recipients = [{
+//         name: coachName,
+//         phone: coachPhone,
+//         type: 'coach'
+//       }];
 
-      message = formatSemiPrivateReminderMessage(schedule);
-    }
-    else {
-      if (schedule.coaches && schedule.coaches.length > 0) {
-        recipients = schedule.coaches
-          .filter(c => c.phone)
-          .map(c => ({
-            name: c.fullName || 'Coach',
-            phone: c.phone,
-            type: 'coach'
-          }));
-      }
+//       message = formatSemiPrivateReminderMessage(schedule);
+//     }
+//     else {
+//       if (schedule.coaches && schedule.coaches.length > 0) {
+//         recipients = schedule.coaches
+//           .filter(c => c.phone)
+//           .map(c => ({
+//             name: c.fullName || 'Coach',
+//             phone: c.phone,
+//             type: 'coach'
+//           }));
+//       }
 
-      if (recipients.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Tidak ada coach dengan nomor HP yang tersedia'
-        });
-      }
+//       if (recipients.length === 0) {
+//         return res.status(400).json({
+//           success: false,
+//           message: 'Tidak ada coach dengan nomor HP yang tersedia'
+//         });
+//       }
 
-      message = formatGroupReminderMessage(schedule);
-    }
+//       message = formatGroupReminderMessage(schedule);
+//     }
 
-    const results = await sendMultipleMessages(recipients, message, 'Reminders');
+//     const results = await sendMultipleMessages(recipients, message, 'Reminders');
 
-    await Schedule.findByIdAndUpdate(req.params.id, {
-      reminderSent: true,
-      reminderSentAt: new Date(),
-      reminderAttempts: (schedule.reminderAttempts || 0) + 1,
-      reminderLastAttempt: new Date()
-    });
+//     await Schedule.findByIdAndUpdate(req.params.id, {
+//       reminderSent: true,
+//       reminderSentAt: new Date(),
+//       reminderAttempts: (schedule.reminderAttempts || 0) + 1,
+//       reminderLastAttempt: new Date()
+//     });
 
-    res.json({
-      success: true,
-      message: `Pengingat WhatsApp berhasil dikirim ke ${results.success.length} coach!`,
-      data: {
-        sent: results.success,
-        failed: results.failed,
-        sentAt: new Date()
-      }
-    });
-  } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Gagal mengirim pengingat WhatsApp',
-      error: error.message
-    });
-  }
-};
+//     res.json({
+//       success: true,
+//       message: `Pengingat WhatsApp berhasil dikirim ke ${results.success.length} coach!`,
+//       data: {
+//         sent: results.success,
+//         failed: results.failed,
+//         sentAt: new Date()
+//       }
+//     });
+//   } catch (error) {
+//     console.error('❌ Error:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Gagal mengirim pengingat WhatsApp',
+//       error: error.message
+//     });
+//   }
+// };
 
 /**
  * ✅ Check schedule conflicts

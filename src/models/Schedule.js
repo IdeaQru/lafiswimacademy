@@ -744,4 +744,168 @@ scheduleSchema.statics.getStatsByType = async function() {
   ]);
 };
 
+// ... kode sebelumnya ...
+
+/**
+ * ✅ Get Daily Recap for Coaches (Untuk Cron Job Jam 6 Pagi)
+ * Mengambil semua jadwal hari ini, dikelompokkan per Coach
+ */
+scheduleSchema.statics.getDailyRecap = async function() {
+  // 1. Tentukan rentang waktu hari ini (00:00 - 23:59)
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  return await this.aggregate([
+    // A. Filter jadwal yang aktif hari ini
+    {
+      $match: {
+        date: { $gte: startOfDay, $lte: endOfDay },
+        status: 'scheduled'
+      }
+    },
+    // B. Pisahkan logika Private dan Group (karena struktur datanya beda)
+    {
+      $facet: {
+        // Jalur 1: Jadwal Private (Coach ada di root document)
+        privateSchedules: [
+          { $match: { scheduleType: 'private' } },
+          { $project: { 
+              coachId: '$coachId', 
+              coachName: '$coachName', 
+              coachPhone: '$coachPhone', 
+              // Data Jadwal
+              startTime: 1, endTime: 1, location: 1,
+              studentName: '$studentName', 
+              category: { $ifNull: ['$programCategory', 'Private'] }
+            } 
+          }
+        ],
+        // Jalur 2: Jadwal Group/Semi (Coach ada di array coaches)
+        groupSchedules: [
+          { $match: { scheduleType: { $in: ['group', 'semiPrivate'] } } },
+          { $unwind: '$coaches' }, // Pecah array coaches agar setiap coach dapat jadwalnya
+          { $project: { 
+              coachId: '$coaches._id', 
+              coachName: '$coaches.fullName', 
+              coachPhone: '$coaches.phone',
+              // Data Jadwal
+              startTime: 1, endTime: 1, location: 1,
+              studentName: '$groupName', // Untuk group, nama siswanya adalah Nama Kelas
+              category: { $ifNull: ['$programCategory', 'Group Class'] }
+            } 
+          }
+        ]
+      }
+    },
+    // C. Gabungkan kembali hasil Private dan Group
+    {
+      $project: {
+        allSchedules: { $concatArrays: ['$privateSchedules', '$groupSchedules'] }
+      }
+    },
+    { $unwind: '$allSchedules' }, // Ratakan array untuk grouping ulang
+    
+    // D. Grouping Final berdasarkan Coach
+    {
+      $group: {
+        _id: '$allSchedules.coachId',
+        coachName: { $first: '$allSchedules.coachName' },
+        coachPhone: { $first: '$allSchedules.coachPhone' },
+        // Kumpulkan list jadwal coach tersebut
+        schedules: {
+          $push: {
+            time: { $concat: ['$allSchedules.startTime', ' - ', '$allSchedules.endTime'] },
+            student: '$allSchedules.studentName',
+            location: '$allSchedules.location',
+            category: '$allSchedules.category'
+          }
+        },
+        totalClasses: { $sum: 1 }
+      }
+    },
+    // E. Sortir jadwal berdasarkan jam (opsional, tapi rapi)
+    { $sort: { 'schedules.time': 1 } }
+  ]);
+};
+/**
+ * ✅ Recap per coach untuk rentang tanggal (PRIVATE + GROUP + SEMIPRIVATE)
+ * Output: [{ _id: coachId, coachName, coachPhone, schedules: [...] }]
+ */
+scheduleSchema.statics.getCoachRecapByRange = async function(startDate, endDate) {
+  const start = new Date(startDate); start.setHours(0, 0, 0, 0);
+  const end = new Date(endDate); end.setHours(23, 59, 59, 999);
+
+  return await this.aggregate([
+    {
+      $match: {
+        date: { $gte: start, $lte: end },
+        status: 'scheduled'
+      }
+    },
+    {
+      $facet: {
+        privateSchedules: [
+          { $match: { scheduleType: 'private' } },
+          {
+            $project: {
+              coachId: '$coachId',
+              coachName: '$coachName',
+              coachPhone: '$coachPhone', // ✅ private: dari root
+
+              date: 1,
+              startTime: 1,
+              endTime: 1,
+              location: 1,
+              category: '$programCategory',
+              students: [{ fullName: '$studentName' }] // samakan bentuk output
+            }
+          }
+        ],
+        groupSchedules: [
+          { $match: { scheduleType: { $in: ['group', 'semiPrivate'] } } },
+          { $unwind: '$coaches' },
+          {
+            $project: {
+              coachId: '$coaches._id',
+              coachName: '$coaches.fullName',
+              coachPhone: '$coaches.phone', // ✅ group/semi: dari coaches.phone
+
+              date: 1,
+              startTime: 1,
+              endTime: 1,
+              location: 1,
+              category: '$programCategory',
+              students: '$students', // ambil semua nama siswa
+              groupName: '$groupName'
+            }
+          }
+        ]
+      }
+    },
+    { $project: { all: { $concatArrays: ['$privateSchedules', '$groupSchedules'] } } },
+    { $unwind: '$all' },
+    {
+      $group: {
+        _id: '$all.coachId',
+        coachName: { $first: '$all.coachName' },
+        coachPhone: { $first: '$all.coachPhone' },
+        schedules: {
+          $push: {
+            date: '$all.date',
+            time: { $concat: ['$all.startTime', ' - ', '$all.endTime'] },
+            location: '$all.location',
+            category: { $ifNull: ['$all.category', '-'] },
+            groupName: { $ifNull: ['$all.groupName', null] },
+            students: '$all.students'
+          }
+        }
+      }
+    }
+  ]);
+};
+
 module.exports = mongoose.model('Schedule', scheduleSchema);
+

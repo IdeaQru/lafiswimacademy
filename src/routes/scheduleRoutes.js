@@ -16,7 +16,7 @@ router.get('/:id', scheduleController.getScheduleById);
 // POST routes
 router.post('/', scheduleController.createSchedule);
 router.post('/check-conflicts', scheduleController.checkConflicts);
-router.post('/:id/send-whatsapp-reminder', scheduleController.sendWhatsAppReminder);
+// router.post('/:id/send-whatsapp-reminder', scheduleController.sendWhatsAppReminder);
 
 // PUT/PATCH routes
 router.put('/:id', scheduleController.updateSchedule);

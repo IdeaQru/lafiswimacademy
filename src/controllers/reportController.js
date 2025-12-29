@@ -1218,14 +1218,12 @@ exports.generateAndSendStudentPDFLinkToWhatsApp = async (req, res) => {
     // ==================== FORMAT WHATSAPP MESSAGE ====================
     const whatsappMessage = message || 
       `Halo ${student.fullName}! 👋\n\n` +
-      `Berikut adalah laporan riwayat latihan {${student.shortName}} di Lafi Swimming Academy.\n\n` +
+      `Berikut adalah laporan riwayat latihan {${student.fullName}} di Lafi Swimming Academy.\n\n` +
       `📊 *Statistik Latihan:*\n` +
       `📅 Periode: ${startDate ? new Date(startDate).toLocaleDateString('id-ID') : 'Semua'} - ${endDate ? new Date(endDate).toLocaleDateString('id-ID') : 'Semua'}\n` +
       `✅ Total Sesi: ${result.stats.total}\n` +
       `✅ Hadir: ${result.stats.hadir}\n` +
       `❌ Tidak Hadir: ${result.stats.tidakHadir}\n` +
-      `📝 Izin: ${result.stats.izin}\n` +
-      `🏥 Sakit: ${result.stats.sakit}\n` +
       `📈 Tingkat Kehadiran: ${result.stats.attendanceRate}%\n\n` +
       `📄 *Download Laporan Perkembangan Bulanan PDF:*\n` +
       `${publicUrl}\n\n` +

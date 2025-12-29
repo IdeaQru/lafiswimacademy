@@ -8,8 +8,9 @@ const connectDB = require('./config/database');
 const whatsappService = require('./services/whatsappService');
 
 // Import cron jobs
-const { reminder24Hours, reminder1Hour } = require('./jobs/scheduleReminderJob');
 const monthlyResetJob = require('./jobs/monthlyResetJob');
+const initDailyRecapJob = require('./jobs/dailyRecapJobs');
+const initAdminRecapJob = require('./jobs/adminRecapJobs');
 
 // Initialize Express
 const app = express();
@@ -253,11 +254,13 @@ app.get('/api/status', (req, res) => {
 
 setTimeout(() => {
   try {
-    reminder24Hours.start();
-    reminder1Hour.start();
-    console.log('⏰ Schedule reminder jobs started');
-    
-    monthlyResetJob.start();
+    // reminder24Hours.start();
+    // reminder1Hour.start();
+    initDailyRecapJob();
+initAdminRecapJob();
+
+monthlyResetJob.start();
+console.log('⏰ Schedule reminder jobs started');
   } catch (error) {
     console.error('❌ Error starting cron jobs:', error.message);
   }
