@@ -6,8 +6,8 @@ const ADMIN_PHONE = '+62 821-4004-4677';
 
 function startOfWeekMonday(d) {
   const date = new Date(d);
-  const day = date.getDay(); // 0=Sun,1=Mon...
-  const diff = (day === 0 ? -6 : 1 - day); // geser ke Monday
+  const day = date.getDay(); 
+  const diff = (day === 0 ? -6 : 1 - day);
   date.setDate(date.getDate() + diff);
   date.setHours(0,0,0,0);
   return date;
@@ -22,32 +22,29 @@ function endOfWeekSunday(d) {
 }
 
 function formatStudents(students, groupName) {
-  // private -> students: [{fullName: 'DEMN2'}]
-  // group  -> students: [{fullName:'A'},{fullName:'B'}]
   if (groupName) return `${groupName} (${(students?.length || 0)} siswa)`;
   return (students || []).map(s => s.fullName).filter(Boolean).join(', ') || '-';
 }
 
 function buildAdminMessage(title, coachRecaps) {
   let msg = `*${title}*\n\n`;
-  // urutkan nama coach biar rapi
   coachRecaps.sort((a,b) => (a.coachName||'').localeCompare(b.coachName||''));
 
   for (const c of coachRecaps) {
+    // SKIP DI MESSAGE JUGA: Jika coach ini tidak punya jadwal, jangan masukkan ke list pesan admin
+    if (!c.schedules || c.schedules.length === 0) continue;
+
     msg += `*Coach: ${c.coachName || '-'}*\n`;
-    // urutkan jam (string HH:mm - HH:mm aman untuk sort lexicographic)
     const schedules = (c.schedules || []).slice().sort((x,y) => (x.time||'').localeCompare(y.time||''));
     for (const s of schedules) {
       msg += `- ${s.time} | ${s.location} | ${formatStudents(s.students, s.groupName)} | ${s.category}\n`;
     }
     msg += '\n';
   }
-
   return msg.trim();
 }
 
-// opsional: pecah kalau kepanjangan (WA kadang gagal kalau terlalu panjang)
-function chunkText(text, maxLen = 55500) {
+function chunkText(text, maxLen = 50000) {
   const chunks = [];
   let buf = '';
   for (const line of text.split('\n')) {
@@ -63,35 +60,60 @@ function chunkText(text, maxLen = 55500) {
 }
 
 function initAdminRecapJob() {
-  // DAILY recap (skip Monday biar tidak double dengan weekly)
+  // DAILY recap (skip Monday biar tidak double dengan weekly, opsional)
   cron.schedule('0 6 * * *', async () => {
     const now = new Date();
-    if (now.getDay() === 1) return; // Senin skip
+    if (now.getDay() === 1) return; // Senin skip Daily Admin
 
     const coachRecaps = await Schedule.getCoachRecapByRange(now, now);
-    if (!coachRecaps.length) return;
+    
+    // CEK DATA KOSONG
+    if (!coachRecaps || coachRecaps.length === 0) return;
 
-    const message = buildAdminMessage('📅 REKAP HARI INI (SEMUA COACH)', coachRecaps);
+    // Filter coach aktif saja
+    const activeCoaches = coachRecaps.filter(c => c.schedules && c.schedules.length > 0);
+    if (activeCoaches.length === 0) return;
+
+    const message = buildAdminMessage('📅 REKAP HARI INI (SEMUA COACH)', activeCoaches);
     for (const part of chunkText(message)) {
-      await whatsappService.sendMessage(ADMIN_PHONE, part, 'admin_daily', null, { recipientName: 'ADMIN' });
+      // FIX ENUM: Pakai 'info'
+      await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
       await new Promise(r => setTimeout(r, 1500));
     }
   }, { timezone: 'Asia/Jakarta' });
 
-  // WEEKLY recap setiap Senin 06:00 (Senin–Minggu minggu ini)
+
+  // WEEKLY recap setiap Senin 06:00
   cron.schedule('0 6 * * 1', async () => {
+    console.log('🔄 Running Weekly Admin Recap...');
     const now = new Date();
     const start = startOfWeekMonday(now);
     const end = endOfWeekSunday(now);
 
     const coachRecaps = await Schedule.getCoachRecapByRange(start, end);
-    if (!coachRecaps.length) return;
+    
+    // LOGIKA SENIN WEEKLY: Jika data kosong, STOP (Jangan kirim apa-apa).
+    if (!coachRecaps || coachRecaps.length === 0) {
+       console.log('ℹ️ Weekly Admin Recap: Data kosong. Skip.');
+       return;
+    }
 
-    const message = buildAdminMessage('🗓️ REKAP 1 MINGGU (SENIN–MINGGU) SEMUA COACH', coachRecaps);
+    // Filter coach yang benar-benar punya jadwal minggu ini
+    const activeCoaches = coachRecaps.filter(c => c.schedules && c.schedules.length > 0);
+    
+    // Jika setelah difilter ternyata kosong semua
+    if (activeCoaches.length === 0) {
+       console.log('ℹ️ Weekly Admin Recap: Tidak ada jadwal aktif minggu ini. Skip.');
+       return;
+    }
+
+    const message = buildAdminMessage('🗓️ REKAP 1 MINGGU (SENIN–MINGGU)', activeCoaches);
     for (const part of chunkText(message)) {
-      await whatsappService.sendMessage(ADMIN_PHONE, part, 'admin_weekly', null, { recipientName: 'ADMIN' });
+      // FIX ENUM: Pakai 'info'
+      await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
       await new Promise(r => setTimeout(r, 1500));
     }
+    console.log('✅ Weekly Admin Recap sent.');
   }, { timezone: 'Asia/Jakarta' });
 }
 

@@ -21,9 +21,12 @@ router.post('/check-conflicts', scheduleController.checkConflicts);
 // PUT/PATCH routes
 router.put('/:id', scheduleController.updateSchedule);
 router.patch('/:id/status', scheduleController.updateScheduleStatus);
-router.patch('/:id/reminder', scheduleController.toggleReminder);
+// router.patch('/:id/reminder', scheduleController.toggleReminder);
 
 // DELETE routes
 router.delete('/:id', scheduleController.deleteSchedule);
-
+router.post(
+  '/recap/manual', 
+  scheduleController.triggerManualRecap
+);
 module.exports = router;

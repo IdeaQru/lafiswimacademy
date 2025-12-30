@@ -2,7 +2,7 @@
 
 const Schedule = require('../models/Schedule');
 const whatsappService = require('../services/whatsappService');
-
+const recapService = require('../services/recapService');
 // ==================== DATE HELPERS ====================
 
 /**
@@ -820,7 +820,57 @@ exports.updateSchedule = async (req, res) => {
     });
   }
 };
+exports.triggerManualRecap = async (req, res) => {
+  // 1. Ambil data 'type' dari body request frontend
+  const { type } = req.body; 
 
+  // 2. Validasi Input: Hanya boleh 'daily' atau 'weekly'
+  if (!type || !['daily', 'weekly'].includes(type)) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Tipe rekap tidak valid. Gunakan "daily" atau "weekly".' 
+    });
+  }
+
+  console.log(`🔌 Manual Trigger received: ${type} recap`);
+
+  try {
+    // 3. Panggil Logic Utama di Service
+    // Kita tidak pakai 'await' di sini agar response ke frontend cepat (async process),
+    // TAPI untuk fitur "Loading..." di frontend, lebih baik pakai 'await' 
+    // agar frontend tahu kapan proses selesai.
+    
+    const result = await recapService.sendRecap(type);
+    
+    // 4. Kirim Response Sukses ke Frontend
+    return res.status(200).json({
+      success: true,
+      message: `Berhasil mengirim rekap ${type}.`,
+      details: {
+        sentCount: result.sentCount,
+        type: result.type
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Manual trigger error:', error);
+    
+    // 5. Kirim Response Error
+    // Cek jika errornya karena tidak ada data
+    if (error.message && error.message.includes('Tidak ada jadwal')) {
+       return res.status(404).json({
+         success: false,
+         message: error.message
+       });
+    }
+
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Terjadi kesalahan saat mengirim rekap.',
+      error: error.message 
+    });
+  }
+};
 /**
  * ✅ Delete schedule
  */
