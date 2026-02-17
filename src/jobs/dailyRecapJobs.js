@@ -2,26 +2,19 @@ const cron = require('node-cron');
 const Schedule = require('../models/Schedule');
 const whatsappService = require('../services/whatsappService');
 
-// Helper: Nama hari Indonesia
 function getDayName(date) {
   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   return days[new Date(date).getDay()];
 }
 
-// Helper: Rentang tanggal teks (misal: "17-22 Februari 2026")
 function getDateRangeText(start, end) {
   const months = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
-  const startDay = start.getDate();
-  const endDay = end.getDate();
-  const month = months[end.getMonth()];
-  const year = end.getFullYear();
-  return `${startDay}-${endDay} ${month}  ${year}`;
+  return `${start.getDate()}-${end.getDate()} ${months[end.getMonth()]}  ${end.getFullYear()}`;
 }
 
-// Helper: Senin awal minggu
 function startOfWeekMonday(d) {
   const date = new Date(d);
   const day = date.getDay();
@@ -31,22 +24,18 @@ function startOfWeekMonday(d) {
   return date;
 }
 
-// Helper: Sabtu akhir kerja (atau Minggu, sesuaikan)
 function endOfWeekSaturday(d) {
   const startMon = startOfWeekMonday(d);
   const endSat = new Date(startMon);
-  endSat.setDate(endSat.getDate() + 5); // Senin + 5 = Sabtu
+  endSat.setDate(endSat.getDate() + 5);
   endSat.setHours(23, 59, 59, 999);
   return endSat;
 }
 
 const initDailyRecapJob = () => {
-  console.log('🕒 Daily Recap Job initialized (Schedule: 06:00 AM)');
+  console.log('🕒 Daily Recap Job initialized (Schedule: Senin 06:00 AM)');
 
-  // ============================
-  // JADWAL MINGGUAN PER COACH
-  // Dikirim setiap Senin jam 06:00
-  // ============================
+  // Kirim rekap mingguan ke masing-masing coach setiap Senin 06:00
   cron.schedule('0 6 * * 1', async () => {
     console.log('🔄 Running Weekly Coach Recap...');
 
@@ -63,7 +52,6 @@ const initDailyRecapJob = () => {
       }
 
       const dateRange = getDateRangeText(weekStart, weekEnd);
-
       console.log(`📨 Mengirim jadwal mingguan ke ${coachRecaps.length} pelatih...`);
 
       for (const recap of coachRecaps) {
@@ -82,14 +70,9 @@ const initDailyRecapJob = () => {
 
         for (const day of recap.schedulesByDay) {
           message += `*${day.dayName}*\n`;
-
           for (const sch of day.schedules) {
-            const time = sch.time || '-';
-            const student = sch.student || '-';
-            const category = sch.category || '-';
-            message += `* ${time} | ${student} | ${category}\n`;
+            message += `* ${sch.time || '-'} | ${sch.student || '-'} | ${sch.category || '-'}\n`;
           }
-
           message += '\n';
         }
 
@@ -105,13 +88,10 @@ const initDailyRecapJob = () => {
       }
 
       console.log('✅ Weekly Coach Recap selesai dikirim.');
-
     } catch (error) {
       console.error('❌ Error sending weekly coach recap:', error);
     }
-  }, {
-    timezone: 'Asia/Jakarta'
-  });
+  }, { timezone: 'Asia/Jakarta' });
 };
 
 module.exports = initDailyRecapJob;

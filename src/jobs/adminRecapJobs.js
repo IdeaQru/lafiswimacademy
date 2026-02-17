@@ -4,7 +4,6 @@ const whatsappService = require('../services/whatsappService');
 
 const ADMIN_PHONE = '+62 821-4004-4677';
 
-// Helper: Senin awal minggu
 function startOfWeekMonday(d) {
   const date = new Date(d);
   const day = date.getDay();
@@ -14,7 +13,6 @@ function startOfWeekMonday(d) {
   return date;
 }
 
-// Helper: Minggu akhir minggu
 function endOfWeekSunday(d) {
   const startMon = startOfWeekMonday(d);
   const endSun = new Date(startMon);
@@ -23,39 +21,23 @@ function endOfWeekSunday(d) {
   return endSun;
 }
 
-// Helper: Rentang tanggal (misal: "16-22 FEBRUARI 2026")
 function getDateRangeText(start, end) {
   const months = [
     'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
     'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
   ];
-  const startDay = start.getDate();
-  const endDay = end.getDate();
-  const month = months[end.getMonth()];
-  const year = end.getFullYear();
-  return `${startDay}-${endDay} ${month} ${year}`;
+  return `${start.getDate()}-${end.getDate()} ${months[end.getMonth()]} ${end.getFullYear()}`;
 }
 
-// Helper: Nama hari Indonesia
 function getDayName(date) {
   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   return days[new Date(date).getDay()];
 }
 
-// Helper: Format nama coach
-function formatCoachNames(coaches) {
-  if (!coaches || coaches.length === 0) return '-';
-  return coaches.filter(Boolean).join(', ');
-}
-
-// Helper: Format nama siswa / group
-function formatStudentLabel(students, groupName) {
-  if (groupName) return groupName;
-  if (!students || students.length === 0) return '-';
-  return students.filter(Boolean).join(', ');
-}
-
-// Build pesan admin: dikelompokkan per HARI, tiap baris = waktu | siswa | coach
+/**
+ * Build pesan admin recap:
+ * Per HARI → per jadwal: * JAM_AWAL | NAMA_SISWA | NAMA_COACH
+ */
 function buildAdminRecapMessage(title, schedulesByDate) {
   let msg = `*${title}*\n\n`;
 
@@ -67,14 +49,14 @@ function buildAdminRecapMessage(title, schedulesByDate) {
 
     msg += `*${getDayName(dateStr)}*\n`;
 
-    // Sort by startTime
     const sorted = schedules.slice().sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
     for (const sch of sorted) {
       const time = (sch.startTime || '??:??').substring(0, 5);
-      const student = formatStudentLabel(sch.studentNames, sch.groupName);
-      const coaches = formatCoachNames(sch.coachNames);
-      msg += `* ${time} | ${student} | ${coaches}\n`;
+      const studentLabel = (sch.studentNames || []).filter(Boolean).join(', ') || '-';
+      const coachLabel = (sch.coachNames || []).filter(Boolean).join(', ') || '-';
+
+      msg += `* ${time} | ${studentLabel} | ${coachLabel}\n`;
     }
 
     msg += '\n';
@@ -83,7 +65,6 @@ function buildAdminRecapMessage(title, schedulesByDate) {
   return msg.trim();
 }
 
-// Chunk text agar tidak melebihi batas karakter WA
 function chunkText(text, maxLen = 50000) {
   const chunks = [];
   let buf = '';
@@ -100,20 +81,15 @@ function chunkText(text, maxLen = 50000) {
 }
 
 function initAdminRecapJob() {
-  // ============================
-  // DAILY ADMIN RECAP
-  // Setiap hari jam 06:00 (skip Senin, karena Senin = weekly)
-  // ============================
+  // DAILY ADMIN RECAP (skip Senin)
   cron.schedule('0 6 * * *', async () => {
     try {
       const now = new Date();
-      if (now.getDay() === 1) return; // Skip Senin
+      if (now.getDay() === 1) return;
 
       const rawSchedules = await Schedule.getAdminRecapByRange(now, now);
-
       if (!rawSchedules || rawSchedules.length === 0) return;
 
-      // Group by date
       const schedulesByDate = {};
       for (const sch of rawSchedules) {
         const dateKey = new Date(sch.date).toISOString().split('T')[0];
@@ -122,8 +98,7 @@ function initAdminRecapJob() {
       }
 
       const dateText = getDateRangeText(now, now);
-      const title = `📅 REKAP ${dateText} (HARI INI) SEMUA COACH`;
-      const message = buildAdminRecapMessage(title, schedulesByDate);
+      const message = buildAdminRecapMessage(`📅 REKAP ${dateText} (HARI INI) SEMUA COACH`, schedulesByDate);
 
       for (const part of chunkText(message)) {
         await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
@@ -134,10 +109,7 @@ function initAdminRecapJob() {
     }
   }, { timezone: 'Asia/Jakarta' });
 
-  // ============================
-  // WEEKLY ADMIN RECAP
-  // Setiap Senin jam 06:00
-  // ============================
+  // WEEKLY ADMIN RECAP (Senin 06:00)
   cron.schedule('0 6 * * 1', async () => {
     console.log('🔄 Running Weekly Admin Recap...');
     try {
@@ -146,13 +118,11 @@ function initAdminRecapJob() {
       const end = endOfWeekSunday(now);
 
       const rawSchedules = await Schedule.getAdminRecapByRange(start, end);
-
       if (!rawSchedules || rawSchedules.length === 0) {
         console.log('ℹ️ Weekly Admin Recap: Data kosong. Skip.');
         return;
       }
 
-      // Group by date
       const schedulesByDate = {};
       for (const sch of rawSchedules) {
         const dateKey = new Date(sch.date).toISOString().split('T')[0];
@@ -161,8 +131,7 @@ function initAdminRecapJob() {
       }
 
       const dateText = getDateRangeText(start, end);
-      const title = `🗓️ REKAP ${dateText} (SENIN–MINGGU) SEMUA COACH`;
-      const message = buildAdminRecapMessage(title, schedulesByDate);
+      const message = buildAdminRecapMessage(`🗓️ REKAP ${dateText} (SENIN–MINGGU) SEMUA COACH`, schedulesByDate);
 
       for (const part of chunkText(message)) {
         await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
