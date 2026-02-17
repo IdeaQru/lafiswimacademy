@@ -135,7 +135,7 @@ function buildCoachRecaps(schedules) {
       location: sch.location || 'Kolam Utama'
     };
 
-    if (sch.scheduleType === 'private' || sch.scheduleType === 'semiPrivate') {
+    if (sch.scheduleType === 'private') {
       // single coach di root
       const coachKey = sch.coachId?.toString() || sch.coachName || 'unknown';
       if (!coachMap[coachKey]) {
@@ -149,7 +149,7 @@ function buildCoachRecaps(schedules) {
         coachMap[coachKey].coachPhone = sch.coachPhone;
       }
       coachMap[coachKey].schedules.push(entry);
-    } else if (sch.scheduleType === 'group') {
+    } else if (sch.scheduleType === 'group' || sch.scheduleType === 'semiPrivate') {
       // multiple coach di array
       const coaches = sch.coaches || [];
       if (!coaches.length) continue;
@@ -169,6 +169,9 @@ function buildCoachRecaps(schedules) {
         coachMap[coachKey].schedules.push(entry);
       }
     }
+    console.log('DEBUG one schedule:', schedules[0]);
+    console.log('DEBUG one label:', getStudentLabel(schedules[0]), schedules[0].coachName);
+
   }
 
   // sort schedules per coach
@@ -202,8 +205,8 @@ const sendRecap = async (type) => {
     coachTitle = '🗓️ JADWAL ANDA MINGGU INI';
     isWeekly = true;
   } else {
-    start = new Date(now); start.setHours(0,0,0,0);
-    end = new Date(now);   end.setHours(23,59,59,999);
+    start = new Date(now); start.setHours(0, 0, 0, 0);
+    end = new Date(now); end.setHours(23, 59, 59, 999);
     adminTitle = '📅 REKAP HARIAN (SEMUA COACH)';
     coachTitle = '📅 JADWAL MENGAJAR HARI INI';
     isWeekly = false;
