@@ -102,7 +102,7 @@ function buildAdminMessage(title, schedules) {
       const student = getStudentLabel(sch);
       let coachLabel = '-';
 
-      if (sch.scheduleType === 'private' || sch.scheduleType === 'semiPrivate') {
+      if (sch.scheduleType === 'private') {
         coachLabel =
           sch.coachId?.fullName ||
           sch.coachName ||
