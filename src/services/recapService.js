@@ -261,9 +261,8 @@ const sendRecap = async (type) => {
 
   if (type === 'weekly') {
     // Weekly: Senin–Minggu minggu ini (berbasis now server, boleh Anda ubah ke Asia/Jakarta juga kalau perlu)
-    const range = getTodayRangeJakarta(now);
-    start = startOfWeekMonday(range);
-    end = endOfWeekSunday(range);
+    start = startOfWeekMonday(now);
+    end = endOfWeekSunday(now);
     adminTitle = '🗓️ REKAP 1 MINGGU (SENIN–MINGGU) SEMUA COACH';
     coachTitle = '🗓️ JADWAL ANDA MINGGU INI';
     isWeekly = true;

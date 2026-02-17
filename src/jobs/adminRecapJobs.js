@@ -88,7 +88,7 @@ function chunkText(text, maxLen = 50000) {
  * Transform raw schedule document → flat admin recap item.
  * Pakai data hasil populate + shortName:
  *   - private:     studentId.shortName || fullName, coachId.fullName
- *   - semiPrivate: students[].shortName || fullName, coachId/fullName
+ *   - semiPrivate: students[].shortName || fullName,  coaches[].fullName
  *   - group:       students[].shortName || fullName, coaches[].fullName
  */
 function transformForAdmin(sch, shortNameMap) {
