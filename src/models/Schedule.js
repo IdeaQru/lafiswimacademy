@@ -4,12 +4,9 @@ const mongoose = require('mongoose');
 
 const scheduleSchema = new mongoose.Schema({
   // ==================== SCHEDULE TYPE ====================
-  /**
-   * ✅ Type: 'private' (1 coach + 1 student) atau 'group' (multiple)
-   */
   scheduleType: {
     type: String,
-    enum: ['semiPrivate', 'group' ,'private'],
+    enum: ['semiPrivate', 'group', 'private'],
     default: 'private',
     required: [true, 'Schedule type is required'],
     index: true
@@ -20,7 +17,6 @@ const scheduleSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Student',
     index: true,
-    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
         if (this.scheduleType === 'private') {
@@ -34,7 +30,6 @@ const scheduleSchema = new mongoose.Schema({
 
   studentName: {
     type: String,
-    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
         if (this.scheduleType === 'private') {
@@ -48,7 +43,6 @@ const scheduleSchema = new mongoose.Schema({
 
   studentPhone: {
     type: String,
-    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
         if (this.scheduleType === 'private') {
@@ -64,7 +58,6 @@ const scheduleSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Coach',
     index: true,
-    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
         if (this.scheduleType === 'private') {
@@ -78,7 +71,6 @@ const scheduleSchema = new mongoose.Schema({
 
   coachName: {
     type: String,
-    // ✅ Required hanya untuk private schedule
     validate: {
       validator: function() {
         if (this.scheduleType === 'private') {
@@ -96,13 +88,9 @@ const scheduleSchema = new mongoose.Schema({
   },
 
   // ==================== GROUP CLASS ====================
-  /**
-   * ✅ Nama group class (untuk group schedule)
-   */
   groupName: {
     type: String,
     default: null,
-    // ✅ Required hanya untuk group schedule
     validate: {
       validator: function() {
         if (this.scheduleType === 'group') {
@@ -114,9 +102,6 @@ const scheduleSchema = new mongoose.Schema({
     }
   },
 
-  /**
-   * ✅ Array pelatih untuk group class
-   */
   coaches: [
     {
       _id: {
@@ -128,9 +113,6 @@ const scheduleSchema = new mongoose.Schema({
     }
   ],
 
-  /**
-   * ✅ Array siswa untuk group class
-   */
   students: [
     {
       _id: {
@@ -147,7 +129,7 @@ const scheduleSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Program is required'],
     enum: [
-       'Private Training',
+      'Private Training',
       'Semi Private Training',
       'Group Class'
     ],
@@ -165,7 +147,6 @@ const scheduleSchema = new mongoose.Schema({
     required: [true, 'Date is required'],
     index: true,
     set: function(value) {
-      // ✅ Normalize date to local midnight (00:00:00)
       if (!value) return null;
       const d = new Date(value);
       return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
@@ -251,10 +232,9 @@ const scheduleSchema = new mongoose.Schema({
   archivedAt: {
     type: Date,
     default: null,
-    // ✅ TTL Index: Auto-delete 3 days (259200 seconds) after archived
     index: {
       expireAfterSeconds: 259200,
-      sparse: true, // Hanya berlaku untuk documents yang punya archivedAt
+      sparse: true,
       name: 'archivedAt_ttl'
     }
   },
@@ -287,32 +267,20 @@ scheduleSchema.index({ coachId: 1, date: -1 });
 scheduleSchema.index({ date: 1, status: 1 });
 scheduleSchema.index({ status: 1 });
 scheduleSchema.index({ scheduleType: 1 });
-
-// ✅ Compound index untuk query archived
 scheduleSchema.index({ status: 1, archivedAt: 1 }, { name: 'status_archived_index' });
-
-// ✅ Index untuk reminder queries
 scheduleSchema.index({ reminderEnabled: 1, reminderSent: 0, date: 1 }, { name: 'reminder_pending_index' });
-
-// ✅ Index untuk group schedules
 scheduleSchema.index({ 'coaches._id': 1 });
 scheduleSchema.index({ 'students._id': 1 });
 
 // ==================== VIRTUALS ====================
 
-/**
- * ✅ Virtual: Display name (untuk private maupun group)
- */
 scheduleSchema.virtual('displayName').get(function() {
   if (this.scheduleType === 'private') {
-    return this.studentName || 'private Schedule';
+    return this.studentName || 'Private Schedule';
   }
   return this.groupName || 'Group Class';
 });
 
-/**
- * ✅ Virtual: Participants info
- */
 scheduleSchema.virtual('participantsInfo').get(function() {
   if (this.scheduleType === 'private') {
     return {
@@ -330,38 +298,27 @@ scheduleSchema.virtual('participantsInfo').get(function() {
   };
 });
 
-/**
- * ✅ Virtual: Is upcoming schedule
- */
 scheduleSchema.virtual('isUpcoming').get(function() {
   const now = new Date();
   const scheduleDate = new Date(this.date);
   const scheduleDatetime = new Date(scheduleDate);
   const [hours, minutes] = this.startTime.split(':');
   scheduleDatetime.setHours(parseInt(hours), parseInt(minutes), 0);
-  
   return scheduleDatetime > now && this.status === 'scheduled';
 });
 
-/**
- * ✅ Virtual: Hours until schedule
- */
 scheduleSchema.virtual('hoursUntil').get(function() {
   const now = new Date();
   const scheduleDate = new Date(this.date);
   const scheduleDatetime = new Date(scheduleDate);
   const [hours, minutes] = this.startTime.split(':');
   scheduleDatetime.setHours(parseInt(hours), parseInt(minutes), 0);
-  
   const diff = scheduleDatetime - now;
   return Math.floor(diff / (1000 * 60 * 60));
 });
 
 // ==================== METHODS ====================
 
-/**
- * ✅ Archive schedule dengan reason
- */
 scheduleSchema.methods.archive = async function(reason = 'manual') {
   this.status = 'archived';
   this.archivedAt = new Date();
@@ -369,29 +326,21 @@ scheduleSchema.methods.archive = async function(reason = 'manual') {
   return await this.save();
 };
 
-/**
- * ✅ Restore archived schedule
- */
 scheduleSchema.methods.restore = async function() {
   if (this.status !== 'archived') {
     throw new Error('Can only restore archived schedules');
   }
-  
   this.status = 'scheduled';
   this.archivedAt = null;
   this.archivedReason = null;
   return await this.save();
 };
 
-/**
- * ✅ Send reminder
- */
 scheduleSchema.methods.sendReminder = async function() {
   if (!this.reminderEnabled) {
     throw new Error('Reminder is not enabled for this schedule');
   }
 
-  // ✅ Hitung waktu reminder
   const scheduleDate = new Date(this.date);
   const [hours, minutes] = this.startTime.split(':');
   scheduleDate.setHours(parseInt(hours), parseInt(minutes), 0);
@@ -403,10 +352,8 @@ scheduleSchema.methods.sendReminder = async function() {
     throw new Error('Too early to send reminder');
   }
 
-  // ✅ TODO: Integrate dengan WhatsApp gateway
-  // Kirim ke semua coach & student
   let recipients = [];
-  
+
   if (this.scheduleType === 'private') {
     recipients = [
       { name: this.studentName, phone: this.studentPhone },
@@ -419,7 +366,6 @@ scheduleSchema.methods.sendReminder = async function() {
     ];
   }
 
-  // Update reminder tracking
   this.reminderSent = true;
   this.reminderSentAt = now;
   this.reminderAttempts = (this.reminderAttempts || 0) + 1;
@@ -434,9 +380,6 @@ scheduleSchema.methods.sendReminder = async function() {
   };
 };
 
-/**
- * ✅ Get all participants (untuk notification)
- */
 scheduleSchema.methods.getAllParticipants = function() {
   if (this.scheduleType === 'private') {
     return [
@@ -471,21 +414,16 @@ scheduleSchema.methods.getAllParticipants = function() {
   ];
 };
 
-/**
- * ✅ Validate schedule conflicts
- */
 scheduleSchema.statics.checkConflicts = async function(scheduleData) {
   const { date, startTime, endTime, scheduleType, coachId, coaches, studentId, students, excludeId } = scheduleData;
 
   const conflicts = [];
 
-  // ✅ Parse times
   const [startHour, startMin] = startTime.split(':').map(Number);
   const [endHour, endMin] = endTime.split(':').map(Number);
   const startMinutes = startHour * 60 + startMin;
   const endMinutes = endHour * 60 + endMin;
 
-  // ✅ Normalize date
   const queryDate = new Date(date);
   queryDate.setHours(0, 0, 0, 0);
 
@@ -506,12 +444,11 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
     const exStartMinutes = exStartHour * 60 + exStartMin;
     const exEndMinutes = exEndHour * 60 + exEndMin;
 
-    // ✅ Check time overlap
     const timeOverlap = startMinutes < exEndMinutes && endMinutes > exStartMinutes;
 
     if (!timeOverlap) continue;
 
-    // ✅ Check coach conflicts
+    // Check coach conflicts
     if (scheduleType === 'private' && existing.scheduleType === 'private') {
       if (existing.coachId?.toString() === coachId?.toString()) {
         conflicts.push({
@@ -539,7 +476,7 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
         });
       }
     } else if (scheduleType === 'group' && existing.scheduleType === 'group') {
-      const coachConflict = coaches.some(c => 
+      const coachConflict = coaches.some(c =>
         existing.coaches.some(ec => ec._id?.toString() === c.toString())
       );
       if (coachConflict) {
@@ -551,7 +488,7 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
       }
     }
 
-    // ✅ Check student conflicts (private only)
+    // Check student conflicts
     if (scheduleType === 'private' && existing.scheduleType === 'private') {
       if (existing.studentId?.toString() === studentId?.toString()) {
         conflicts.push({
@@ -577,9 +514,6 @@ scheduleSchema.statics.checkConflicts = async function(scheduleData) {
 
 // ==================== STATICS ====================
 
-/**
- * ✅ Get pending reminders (untuk background job)
- */
 scheduleSchema.statics.getPendingReminders = async function(hoursBuffer = 24) {
   const now = new Date();
   const futureDate = new Date(now.getTime() + hoursBuffer * 60 * 60 * 1000);
@@ -595,9 +529,6 @@ scheduleSchema.statics.getPendingReminders = async function(hoursBuffer = 24) {
   }).sort({ date: 1, startTime: 1 });
 };
 
-/**
- * ✅ Get schedules by coach
- */
 scheduleSchema.statics.getByCoach = async function(coachId, startDate, endDate) {
   return await this.find({
     $or: [
@@ -611,9 +542,6 @@ scheduleSchema.statics.getByCoach = async function(coachId, startDate, endDate) 
   });
 };
 
-/**
- * ✅ Get schedules by student
- */
 scheduleSchema.statics.getByStudent = async function(studentId, startDate, endDate) {
   return await this.find({
     $or: [
@@ -627,9 +555,6 @@ scheduleSchema.statics.getByStudent = async function(studentId, startDate, endDa
   });
 };
 
-/**
- * ✅ Get group schedules
- */
 scheduleSchema.statics.getGroupSchedules = async function(startDate, endDate) {
   return await this.find({
     scheduleType: 'group',
@@ -640,9 +565,6 @@ scheduleSchema.statics.getGroupSchedules = async function(startDate, endDate) {
   });
 };
 
-/**
- * ✅ Get private schedules
- */
 scheduleSchema.statics.getIndividualSchedules = async function(startDate, endDate) {
   return await this.find({
     scheduleType: 'private',
@@ -653,9 +575,6 @@ scheduleSchema.statics.getIndividualSchedules = async function(startDate, endDat
   });
 };
 
-/**
- * ✅ Get archived schedules older than specified days
- */
 scheduleSchema.statics.getOldArchivedSchedules = async function(days = 3) {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
@@ -666,9 +585,6 @@ scheduleSchema.statics.getOldArchivedSchedules = async function(days = 3) {
   }).lean();
 };
 
-/**
- * ✅ Manually delete old archived schedules
- */
 scheduleSchema.statics.deleteOldArchivedSchedules = async function(days = 3) {
   console.log(`🗑️ Deleting archived schedules older than ${days} days...`);
 
@@ -684,9 +600,6 @@ scheduleSchema.statics.deleteOldArchivedSchedules = async function(days = 3) {
   return result;
 };
 
-/**
- * ✅ Get archive statistics
- */
 scheduleSchema.statics.getArchiveStats = async function() {
   const total = await this.countDocuments({ status: 'archived' });
 
@@ -714,9 +627,6 @@ scheduleSchema.statics.getArchiveStats = async function() {
   };
 };
 
-/**
- * ✅ Get schedule statistics by status
- */
 scheduleSchema.statics.getStatsByStatus = async function() {
   return await this.aggregate([
     {
@@ -729,9 +639,6 @@ scheduleSchema.statics.getStatsByStatus = async function() {
   ]);
 };
 
-/**
- * ✅ Get statistics by schedule type
- */
 scheduleSchema.statics.getStatsByType = async function() {
   return await this.aggregate([
     {
@@ -744,80 +651,78 @@ scheduleSchema.statics.getStatsByType = async function() {
   ]);
 };
 
-// ... kode sebelumnya ...
-
 /**
- * ✅ Get Daily Recap for Coaches (Untuk Cron Job Jam 6 Pagi)
- * Mengambil semua jadwal hari ini, dikelompokkan per Coach
+ * ✅ FIX: getDailyRecap — semua field pakai $ifNull untuk mencegah null
  */
 scheduleSchema.statics.getDailyRecap = async function() {
-  // 1. Tentukan rentang waktu hari ini (00:00 - 23:59)
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  
+
   const endOfDay = new Date();
   endOfDay.setHours(23, 59, 59, 999);
 
   return await this.aggregate([
-    // A. Filter jadwal yang aktif hari ini
     {
       $match: {
         date: { $gte: startOfDay, $lte: endOfDay },
         status: 'scheduled'
       }
     },
-    // B. Pisahkan logika Private dan Group (karena struktur datanya beda)
     {
       $facet: {
-        // Jalur 1: Jadwal Private (Coach ada di root document)
         privateSchedules: [
           { $match: { scheduleType: 'private' } },
-          { $project: { 
-              coachId: '$coachId', 
-              coachName: '$coachName', 
-              coachPhone: '$coachPhone', 
-              // Data Jadwal
-              startTime: 1, endTime: 1, location: 1,
-              studentName: '$studentName', 
-              category: { $ifNull: ['$programCategory', 'Private'] }
-            } 
+          {
+            $project: {
+              coachId: '$coachId',
+              coachName: { $ifNull: ['$coachName', 'Unknown Coach'] },
+              coachPhone: { $ifNull: ['$coachPhone', null] },
+              startTime: 1,
+              endTime: 1,
+              location: { $ifNull: ['$location', 'Belum ditentukan'] },
+              studentName: { $ifNull: ['$studentName', '-'] },
+              category: { $ifNull: ['$programCategory', 'Private Training'] }
+            }
           }
         ],
-        // Jalur 2: Jadwal Group/Semi (Coach ada di array coaches)
         groupSchedules: [
           { $match: { scheduleType: { $in: ['group', 'semiPrivate'] } } },
-          { $unwind: '$coaches' }, // Pecah array coaches agar setiap coach dapat jadwalnya
-          { $project: { 
-              coachId: '$coaches._id', 
-              coachName: '$coaches.fullName', 
-              coachPhone: '$coaches.phone',
-              // Data Jadwal
-              startTime: 1, endTime: 1, location: 1,
-              studentName: '$groupName', // Untuk group, nama siswanya adalah Nama Kelas
+          { $unwind: '$coaches' },
+          {
+            $project: {
+              coachId: '$coaches._id',
+              coachName: { $ifNull: ['$coaches.fullName', 'Unknown Coach'] },
+              coachPhone: { $ifNull: ['$coaches.phone', null] },
+              startTime: 1,
+              endTime: 1,
+              location: { $ifNull: ['$location', 'Belum ditentukan'] },
+              studentName: { $ifNull: ['$groupName', 'Group Class'] },
               category: { $ifNull: ['$programCategory', 'Group Class'] }
-            } 
+            }
           }
         ]
       }
     },
-    // C. Gabungkan kembali hasil Private dan Group
     {
       $project: {
         allSchedules: { $concatArrays: ['$privateSchedules', '$groupSchedules'] }
       }
     },
-    { $unwind: '$allSchedules' }, // Ratakan array untuk grouping ulang
-    
-    // D. Grouping Final berdasarkan Coach
+    { $unwind: '$allSchedules' },
     {
       $group: {
         _id: '$allSchedules.coachId',
         coachName: { $first: '$allSchedules.coachName' },
         coachPhone: { $first: '$allSchedules.coachPhone' },
-        // Kumpulkan list jadwal coach tersebut
         schedules: {
           $push: {
-            time: { $concat: ['$allSchedules.startTime', ' - ', '$allSchedules.endTime'] },
+            time: {
+              $concat: [
+                { $ifNull: ['$allSchedules.startTime', '??'] },
+                ' - ',
+                { $ifNull: ['$allSchedules.endTime', '??'] }
+              ]
+            },
             student: '$allSchedules.studentName',
             location: '$allSchedules.location',
             category: '$allSchedules.category'
@@ -826,13 +731,12 @@ scheduleSchema.statics.getDailyRecap = async function() {
         totalClasses: { $sum: 1 }
       }
     },
-    // E. Sortir jadwal berdasarkan jam (opsional, tapi rapi)
-    { $sort: { 'schedules.time': 1 } }
+    { $sort: { coachName: 1 } }
   ]);
 };
+
 /**
- * ✅ Recap per coach untuk rentang tanggal (PRIVATE + GROUP + SEMIPRIVATE)
- * Output: [{ _id: coachId, coachName, coachPhone, schedules: [...] }]
+ * ✅ FIX: getCoachRecapByRange — semua field pakai $ifNull untuk mencegah null
  */
 scheduleSchema.statics.getCoachRecapByRange = async function(startDate, endDate) {
   const start = new Date(startDate); start.setHours(0, 0, 0, 0);
@@ -852,15 +756,14 @@ scheduleSchema.statics.getCoachRecapByRange = async function(startDate, endDate)
           {
             $project: {
               coachId: '$coachId',
-              coachName: '$coachName',
-              coachPhone: '$coachPhone', // ✅ private: dari root
-
+              coachName: { $ifNull: ['$coachName', 'Unknown Coach'] },
+              coachPhone: { $ifNull: ['$coachPhone', null] },
               date: 1,
               startTime: 1,
               endTime: 1,
-              location: 1,
-              category: '$programCategory',
-              students: [{ fullName: '$studentName' }] // samakan bentuk output
+              location: { $ifNull: ['$location', 'Belum ditentukan'] },
+              category: { $ifNull: ['$programCategory', 'Private Training'] },
+              students: [{ fullName: { $ifNull: ['$studentName', '-'] } }]
             }
           }
         ],
@@ -870,16 +773,15 @@ scheduleSchema.statics.getCoachRecapByRange = async function(startDate, endDate)
           {
             $project: {
               coachId: '$coaches._id',
-              coachName: '$coaches.fullName',
-              coachPhone: '$coaches.phone', // ✅ group/semi: dari coaches.phone
-
+              coachName: { $ifNull: ['$coaches.fullName', 'Unknown Coach'] },
+              coachPhone: { $ifNull: ['$coaches.phone', null] },
               date: 1,
               startTime: 1,
               endTime: 1,
-              location: 1,
-              category: '$programCategory',
-              students: '$students', // ambil semua nama siswa
-              groupName: '$groupName'
+              location: { $ifNull: ['$location', 'Belum ditentukan'] },
+              category: { $ifNull: ['$programCategory', 'Group Class'] },
+              students: { $ifNull: ['$students', []] },
+              groupName: { $ifNull: ['$groupName', 'Group Class'] }
             }
           }
         ]
@@ -895,17 +797,23 @@ scheduleSchema.statics.getCoachRecapByRange = async function(startDate, endDate)
         schedules: {
           $push: {
             date: '$all.date',
-            time: { $concat: ['$all.startTime', ' - ', '$all.endTime'] },
+            time: {
+              $concat: [
+                { $ifNull: ['$all.startTime', '??'] },
+                ' - ',
+                { $ifNull: ['$all.endTime', '??'] }
+              ]
+            },
             location: '$all.location',
-            category: { $ifNull: ['$all.category', '-'] },
-            groupName: { $ifNull: ['$all.groupName', null] },
+            category: '$all.category',
+            groupName: '$all.groupName',
             students: '$all.students'
           }
         }
       }
-    }
+    },
+    { $sort: { coachName: 1 } }
   ]);
 };
 
 module.exports = mongoose.model('Schedule', scheduleSchema);
-
