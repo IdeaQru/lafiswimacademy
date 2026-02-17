@@ -4,7 +4,9 @@ const Schedule = require('../models/Schedule');
 const Student = require('../models/Student');
 const whatsappService = require('../services/whatsappService');
 
-const ADMIN_PHONE = '+62 811-359-0718';
+// const ADMIN_PHONE = '+62 811-359-0718';
+const ADMIN_PHONE = '+62 821-4004-4677';
+
 const TZ = 'Asia/Jakarta';
 const TZ_OFFSET = '+07:00';
 
