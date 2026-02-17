@@ -24,6 +24,30 @@ function endOfWeekSunday(d) {
   return endSun;
 }
 
+// Ambil awal & akhir hari lokal Asia/Jakarta (UTC+7)
+function getTodayRangeJakarta(baseDate = new Date()) {
+  const formatter = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+
+  const parts = formatter.formatToParts(baseDate);
+  const dayPart   = parts.find(p => p.type === 'day');
+  const monthPart = parts.find(p => p.type === 'month');
+  const yearPart  = parts.find(p => p.type === 'year');
+
+  const day   = dayPart.value;
+  const month = monthPart.value;
+  const year  = yearPart.value;
+
+  const startLocal = new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+  const endLocal   = new Date(`${year}-${month}-${day}T23:59:59.999+07:00`);
+
+  return { start: startLocal, end: endLocal };
+}
+
 function getDateRangeText(start, end) {
   const months = [
     'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
@@ -143,8 +167,8 @@ function transformForAdmin(sch, shortNameMap) {
  * Fetch schedules + populate + shortName lalu group per tanggal
  */
 async function getAdminRecapData(startDate, endDate) {
-  const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-  const end = new Date(endDate);     end.setHours(23, 59, 59, 999);
+  const start = new Date(startDate);
+  const end   = new Date(endDate);
 
   const schedules = await Schedule.find({
     date: { $gte: start, $lte: end },
@@ -204,12 +228,15 @@ function initAdminRecapJob() {
   cron.schedule('0 6 * * *', async () => {
     try {
       const now = new Date();
-      if (now.getDay() === 1) return;
+      if (now.getDay() === 1) return; // skip Senin
 
-      const schedulesByDate = await getAdminRecapData(now, now);
+      // Gunakan range hari ini di Asia/Jakarta
+      const { start, end } = getTodayRangeJakarta(now);
+
+      const schedulesByDate = await getAdminRecapData(start, end);
       if (!schedulesByDate) return;
 
-      const dateText = getDateRangeText(now, now);
+      const dateText = getDateRangeText(start, end);
       const message = buildAdminRecapMessage(
         `📅 REKAP ${dateText} (HARI INI) SEMUA COACH`,
         schedulesByDate
@@ -236,7 +263,7 @@ function initAdminRecapJob() {
     try {
       const now = new Date();
       const start = startOfWeekMonday(now);
-      const end = endOfWeekSunday(now);
+      const end   = endOfWeekSunday(now);
 
       const schedulesByDate = await getAdminRecapData(start, end);
       if (!schedulesByDate) {
