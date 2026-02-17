@@ -28,14 +28,18 @@ function getDayName(date) {
   return days[new Date(date).getDay()];
 }
 
-// Ambil label siswa sesuai scheduleType
+// Ambil label siswa sesuai scheduleType (pakai hasil populate)
 function getStudentLabel(schedule) {
   if (schedule.scheduleType === 'private') {
-    return schedule.studentName || '-';
+    return (
+      schedule.studentId?.fullName || // dari populate
+      schedule.studentName ||         // fallback root
+      '-'
+    );
   }
 
   const names = (schedule.students || [])
-    .map(s => s.fullName)
+    .map(s => s.fullName || s.studentName)
     .filter(Boolean);
 
   if (names.length > 0) return names.join(', ');
@@ -78,7 +82,9 @@ function buildAdminMessage(title, schedules) {
     byDate[dateKey].push(sch);
   }
 
-  const sortedDates = Object.keys(byDate).sort((a, b) => new Date(a) - new Date(b));
+  const sortedDates = Object.keys(byDate).sort(
+    (a, b) => new Date(a) - new Date(b)
+  );
 
   for (const dateStr of sortedDates) {
     const list = byDate[dateStr];
@@ -87,7 +93,9 @@ function buildAdminMessage(title, schedules) {
     msg += `*${getDayName(dateStr)}*\n`;
 
     // sort by startTime
-    list.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    list.sort((a, b) =>
+      (a.startTime || '').localeCompare(b.startTime || '')
+    );
 
     for (const sch of list) {
       const time = (sch.startTime || '??:??').substring(0, 5);
@@ -95,10 +103,13 @@ function buildAdminMessage(title, schedules) {
       let coachLabel = '-';
 
       if (sch.scheduleType === 'private' || sch.scheduleType === 'semiPrivate') {
-        coachLabel = sch.coachName || '-';
+        coachLabel =
+          sch.coachId?.fullName ||
+          sch.coachName ||
+          '-';
       } else {
         const coachNames = (sch.coaches || [])
-          .map(c => c.fullName)
+          .map(c => c.fullName || c.coachName)
           .filter(Boolean);
         coachLabel = coachNames.length ? coachNames.join(', ') : '-';
       }
@@ -136,42 +147,59 @@ function buildCoachRecaps(schedules) {
     };
 
     if (sch.scheduleType === 'private') {
-      // single coach di root
-      const coachKey = sch.coachId?.toString() || sch.coachName || 'unknown';
+      // single coach di root (pakai populate coachId)
+      const coachName =
+        sch.coachId?.fullName ||
+        sch.coachName ||
+        'Coach';
+      const coachPhone =
+        sch.coachId?.phone ||
+        sch.coachPhone ||
+        null;
+
+      const coachKey =
+        sch.coachId?._id?.toString() ||
+        sch.coachId?.toString() ||
+        coachName;
+
       if (!coachMap[coachKey]) {
         coachMap[coachKey] = {
-          coachName: sch.coachName || '-',
-          coachPhone: sch.coachPhone || null,
+          coachName,
+          coachPhone,
           schedules: []
         };
       }
-      if (sch.coachPhone && !coachMap[coachKey].coachPhone) {
-        coachMap[coachKey].coachPhone = sch.coachPhone;
+      if (coachPhone && !coachMap[coachKey].coachPhone) {
+        coachMap[coachKey].coachPhone = coachPhone;
       }
       coachMap[coachKey].schedules.push(entry);
+
     } else if (sch.scheduleType === 'group' || sch.scheduleType === 'semiPrivate') {
-      // multiple coach di array
+      // multiple coach di array (pakai populate coaches[])
       const coaches = sch.coaches || [];
       if (!coaches.length) continue;
 
       for (const coach of coaches) {
-        const coachKey = coach._id?.toString() || coach.fullName || 'unknown';
+        const coachName = coach.fullName || coach.coachName || 'Coach';
+        const coachPhone = coach.phone || null;
+
+        const coachKey =
+          coach._id?.toString() ||
+          coachName;
+
         if (!coachMap[coachKey]) {
           coachMap[coachKey] = {
-            coachName: coach.fullName || '-',
-            coachPhone: coach.phone || null,
+            coachName,
+            coachPhone,
             schedules: []
           };
         }
-        if (coach.phone && !coachMap[coachKey].coachPhone) {
-          coachMap[coachKey].coachPhone = coach.phone;
+        if (coachPhone && !coachMap[coachKey].coachPhone) {
+          coachMap[coachKey].coachPhone = coachPhone;
         }
         coachMap[coachKey].schedules.push(entry);
       }
     }
-    console.log('DEBUG one schedule:', schedules[0]);
-    console.log('DEBUG one label:', getStudentLabel(schedules[0]), schedules[0].coachName);
-
   }
 
   // sort schedules per coach
@@ -184,7 +212,9 @@ function buildCoachRecaps(schedules) {
   });
 
   // sort by coach name
-  result.sort((a, b) => (a.coachName || '').localeCompare(b.coachName || ''));
+  result.sort((a, b) =>
+    (a.coachName || '').localeCompare(b.coachName || '')
+  );
   return result;
 }
 
@@ -206,18 +236,24 @@ const sendRecap = async (type) => {
     isWeekly = true;
   } else {
     start = new Date(now); start.setHours(0, 0, 0, 0);
-    end = new Date(now); end.setHours(23, 59, 59, 999);
+    end = new Date(now);   end.setHours(23, 59, 59, 999);
     adminTitle = '📅 REKAP HARIAN (SEMUA COACH)';
     coachTitle = '📅 JADWAL MENGAJAR HARI INI';
     isWeekly = false;
   }
 
   try {
-    // Ambil data raw langsung dari Schedule (tanpa aggregate lama)
+    // Ambil data raw + populate supaya nama terisi
     const schedules = await Schedule.find({
       date: { $gte: start, $lte: end },
       status: 'scheduled'
-    }).sort({ date: 1, startTime: 1 }).lean();
+    })
+      .sort({ date: 1, startTime: 1 })
+      .populate('studentId', '_id fullName')
+      .populate('coachId', '_id fullName phone')
+      .populate('students', '_id fullName')
+      .populate('coaches', '_id fullName phone')
+      .lean();
 
     if (!schedules || schedules.length === 0) {
       console.log(`ℹ️ Tidak ada jadwal untuk periode ${type}.`);
@@ -250,7 +286,6 @@ const sendRecap = async (type) => {
 
       let msg = `*${coachTitle}*\n`;
       if (isWeekly) {
-        const rangeText = `${start.getDate()}-${end.getDate()}`;
         msg = `*🗓️ JADWAL ANDA MINGGU INI*\n`;
         msg += `Halo Coach *${recap.coachName}*, berikut jadwal Anda:\n\n`;
       } else {
