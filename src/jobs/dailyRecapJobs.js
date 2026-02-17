@@ -1,3 +1,4 @@
+// backend/src/jobs/dailyRecapJobs.js
 const cron = require('node-cron');
 const Schedule = require('../models/Schedule');
 const whatsappService = require('../services/whatsappService');
@@ -12,7 +13,7 @@ function getDateRangeText(start, end) {
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
-  return `${start.getDate()}-${end.getDate()} ${months[end.getMonth()]}  ${end.getFullYear()}`;
+  return `${start.getDate()}-${end.getDate()} ${months[end.getMonth()]} ${end.getFullYear()}`;
 }
 
 function startOfWeekMonday(d) {
@@ -32,19 +33,14 @@ function endOfWeekSaturday(d) {
   return endSat;
 }
 
-/**
- * Transform 1 schedule document → object untuk pesan coach.
- * Berdasarkan struktur schema yang benar:
- *   - private:     coachName/coachPhone (root), studentName (root)
- *   - semiPrivate: coachName/coachPhone (root), students[] array
- *   - group:       coaches[] array, students[] array
- */
+// === Helpers pakai data hasil populate ===
 function getStudentLabel(sch) {
   if (sch.scheduleType === 'private') {
-    return sch.studentName || '-';
+    return sch.studentId?.fullName || sch.studentName || '-';
   }
-  // semiPrivate & group: ambil dari students[] array
-  const names = (sch.students || []).map(s => s.fullName).filter(Boolean);
+  const names = (sch.students || [])
+    .map(s => s.fullName || s.studentName)
+    .filter(Boolean);
   return names.length > 0 ? names.join(', ') : (sch.groupName || '-');
 }
 
@@ -56,57 +52,63 @@ function getCategory(sch) {
 }
 
 /**
- * Build coach weekly recap data dari raw schedules.
- * 
- * Karena semiPrivate punya coachId/coachName di root (1 coach),
- * sedangkan group punya coaches[] (multiple coach),
- * kita harus flatten per coach.
+ * Build coach weekly recap data dari raw schedules (sudah di-populate)
  */
 function buildCoachRecaps(schedules) {
-  // coachMap: { coachKey -> { coachName, coachPhone, dayMap: { dateStr -> [schedules] } } }
   const coachMap = {};
 
   for (const sch of schedules) {
-    const dateStr = new Date(sch.date).toISOString().split('T')[0];
+    const date = new Date(sch.date);
+    const dateStr = date.toISOString().split('T')[0];
     const studentLabel = getStudentLabel(sch);
     const category = getCategory(sch);
     const time = `${sch.startTime || '??:??'} - ${sch.endTime || '??:??'}`;
 
     const entry = { time, student: studentLabel, category, startTime: sch.startTime || '00:00' };
 
-    if (sch.scheduleType === 'private' || sch.scheduleType === 'semiPrivate') {
-      // Private & SemiPrivate: coach di root level
-      const coachKey = sch.coachId?.toString() || sch.coachName || 'unknown';
+    if (sch.scheduleType === 'private') {
+      // Coach dari coachId (populate)
+      const coachName = sch.coachId?.fullName || sch.coachName || 'Coach';
+      const coachPhone = sch.coachId?.phone || sch.coachPhone || null;
+      const coachKey =
+        sch.coachId?._id?.toString() ||
+        sch.coachId?.toString() ||
+        coachName;
+
       if (!coachMap[coachKey]) {
         coachMap[coachKey] = {
-          coachName: sch.coachName || '-',
-          coachPhone: sch.coachPhone || null,
+          coachName,
+          coachPhone,
           dayMap: {}
         };
       }
-      // Update phone jika ketemu yang valid
-      if (sch.coachPhone && !coachMap[coachKey].coachPhone) {
-        coachMap[coachKey].coachPhone = sch.coachPhone;
+      if (coachPhone && !coachMap[coachKey].coachPhone) {
+        coachMap[coachKey].coachPhone = coachPhone;
       }
       if (!coachMap[coachKey].dayMap[dateStr]) coachMap[coachKey].dayMap[dateStr] = [];
       coachMap[coachKey].dayMap[dateStr].push(entry);
 
-    } else if (sch.scheduleType === 'group') {
-      // Group: coaches di coaches[] array
+   
+
+    } else if (sch.scheduleType === 'group' || sch.scheduleType === 'semiPrivate') {
+      // Group: multiple coach di coaches[]
       const coachList = sch.coaches || [];
-      if (coachList.length === 0) continue; // skip jika tidak ada coach
+      if (coachList.length === 0) continue;
 
       for (const coach of coachList) {
-        const coachKey = coach._id?.toString() || coach.fullName || 'unknown';
+        const coachName = coach.fullName || 'Coach';
+        const coachPhone = coach.phone || null;
+        const coachKey = coach._id?.toString() || coachName;
+
         if (!coachMap[coachKey]) {
           coachMap[coachKey] = {
-            coachName: coach.fullName || '-',
-            coachPhone: coach.phone || null,
+            coachName,
+            coachPhone,
             dayMap: {}
           };
         }
-        if (coach.phone && !coachMap[coachKey].coachPhone) {
-          coachMap[coachKey].coachPhone = coach.phone;
+        if (coachPhone && !coachMap[coachKey].coachPhone) {
+          coachMap[coachKey].coachPhone = coachPhone;
         }
         if (!coachMap[coachKey].dayMap[dateStr]) coachMap[coachKey].dayMap[dateStr] = [];
         coachMap[coachKey].dayMap[dateStr].push(entry);
@@ -114,7 +116,6 @@ function buildCoachRecaps(schedules) {
     }
   }
 
-  // Convert to array format
   const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
   return Object.values(coachMap)
@@ -143,11 +144,17 @@ const initDailyRecapJob = () => {
       const weekStart = startOfWeekMonday(now);
       const weekEnd = endOfWeekSaturday(now);
 
-      // Fetch semua jadwal minggu ini (plain objects, no aggregation)
+      // Fetch + populate
       const schedules = await Schedule.find({
         date: { $gte: weekStart, $lte: weekEnd },
         status: 'scheduled'
-      }).sort({ date: 1, startTime: 1 }).lean();
+      })
+        .sort({ date: 1, startTime: 1 })
+        .populate('studentId', '_id fullName')
+        .populate('coachId', '_id fullName phone')
+        .populate('students', '_id fullName')
+        .populate('coaches', '_id fullName phone')
+        .lean();
 
       if (!schedules || schedules.length === 0) {
         console.log('ℹ️ Tidak ada jadwal minggu ini. Job selesai.');
@@ -170,7 +177,7 @@ const initDailyRecapJob = () => {
           continue;
         }
 
-        let message = `*JADWAL ANDA  MINGGU INI ${dateRange}*\n`;
+        let message = `*JADWAL ANDA MINGGU INI ${dateRange}*\n`;
         message += `Halo Coach *${recap.coachName}*, berikut jadwal Anda:\n\n`;
 
         for (const day of recap.schedulesByDay) {

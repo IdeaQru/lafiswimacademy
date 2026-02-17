@@ -1,3 +1,4 @@
+// backend/src/jobs/adminRecapJobs.js
 const cron = require('node-cron');
 const Schedule = require('../models/Schedule');
 const whatsappService = require('../services/whatsappService');
@@ -37,12 +38,13 @@ function getDayName(date) {
 /**
  * Format admin recap message.
  * Output per hari: * JAM_AWAL | NAMA_SISWA | NAMA_COACH
- * Tanpa kategori, tanpa jam akhir.
  */
 function buildAdminRecapMessage(title, schedulesByDate) {
   let msg = `*${title}*\n\n`;
 
-  const sortedDates = Object.keys(schedulesByDate).sort((a, b) => new Date(a) - new Date(b));
+  const sortedDates = Object.keys(schedulesByDate).sort(
+    (a, b) => new Date(a) - new Date(b)
+  );
 
   for (const dateStr of sortedDates) {
     const schedules = schedulesByDate[dateStr];
@@ -50,7 +52,9 @@ function buildAdminRecapMessage(title, schedulesByDate) {
 
     msg += `*${getDayName(dateStr)}*\n`;
 
-    const sorted = schedules.slice().sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    const sorted = schedules
+      .slice()
+      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
     for (const sch of sorted) {
       const time = (sch.startTime || '??:??').substring(0, 5);
@@ -80,39 +84,28 @@ function chunkText(text, maxLen = 50000) {
 
 /**
  * Transform raw schedule document → flat admin recap item.
- * Handles private / semiPrivate / group correctly based on actual schema:
- *   - private:     coachName (root), studentName (root)
- *   - semiPrivate: coachName (root), students[] array
- *   - group:       coaches[] array, students[] array, groupName
+ * Pakai data hasil populate:
+ *   - private:     studentId.fullName, coachId.fullName
+ *   - semiPrivate: students[].fullName, coachId.fullName
+ *   - group:       students[].fullName, coaches[].fullName
  */
 function transformForAdmin(sch) {
   let studentLabel = '-';
   let coachLabel = '-';
 
   if (sch.scheduleType === 'private') {
-    // Private: nama siswa dan coach langsung di root
-    studentLabel = sch.studentName || '-';
-    coachLabel = sch.coachName || '-';
-
-  } else if (sch.scheduleType === 'semiPrivate') {
-    // Semi Private: coach di root, siswa di students[] array
-    const names = (sch.students || [])
-      .map(s => s.fullName)
-      .filter(Boolean);
-    studentLabel = names.length > 0 ? names.join(', ') : '-';
-    coachLabel = sch.coachName || '-';
-
-  } else if (sch.scheduleType === 'group') {
-    // Group: coach di coaches[] array, siswa di students[] array
+    studentLabel = sch.studentId?.fullName || sch.studentName || '-';
+    coachLabel = sch.coachId?.fullName || sch.coachName || '-';
+  } else if (sch.scheduleType === 'group' || sch.scheduleType === 'semiPrivate') {
     const studentNames = (sch.students || [])
-      .map(s => s.fullName)
+      .map(s => s.fullName || s.studentName)
       .filter(Boolean);
     studentLabel = studentNames.length > 0
       ? studentNames.join(', ')
       : (sch.groupName || '-');
 
     const coachNames = (sch.coaches || [])
-      .map(c => c.fullName)
+      .map(c => c.fullName || c.coachName)
       .filter(Boolean);
     coachLabel = coachNames.length > 0 ? coachNames.join(', ') : '-';
   }
@@ -126,20 +119,25 @@ function transformForAdmin(sch) {
 }
 
 /**
- * Fetch schedules dan transform untuk admin recap
+ * Fetch schedules + populate, lalu group per tanggal
  */
 async function getAdminRecapData(startDate, endDate) {
   const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-  const end = new Date(endDate); end.setHours(23, 59, 59, 999);
+  const end = new Date(endDate);     end.setHours(23, 59, 59, 999);
 
   const schedules = await Schedule.find({
     date: { $gte: start, $lte: end },
     status: 'scheduled'
-  }).sort({ date: 1, startTime: 1 }).lean();
+  })
+    .sort({ date: 1, startTime: 1 })
+    .populate('studentId', '_id fullName')
+    .populate('coachId', '_id fullName phone')
+    .populate('students', '_id fullName')
+    .populate('coaches', '_id fullName phone')
+    .lean();
 
   if (!schedules || schedules.length === 0) return null;
 
-  // Transform & group by date
   const schedulesByDate = {};
   for (const sch of schedules) {
     const item = transformForAdmin(sch);
@@ -168,7 +166,13 @@ function initAdminRecapJob() {
       );
 
       for (const part of chunkText(message)) {
-        await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
+        await whatsappService.sendMessage(
+          ADMIN_PHONE,
+          part,
+          'info',
+          null,
+          { recipientName: 'ADMIN' }
+        );
         await new Promise(r => setTimeout(r, 1500));
       }
     } catch (error) {
@@ -197,7 +201,13 @@ function initAdminRecapJob() {
       );
 
       for (const part of chunkText(message)) {
-        await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
+        await whatsappService.sendMessage(
+          ADMIN_PHONE,
+          part,
+          'info',
+          null,
+          { recipientName: 'ADMIN' }
+        );
         await new Promise(r => setTimeout(r, 1500));
       }
       console.log('✅ Weekly Admin Recap sent.');

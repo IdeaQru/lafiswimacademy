@@ -2,7 +2,7 @@
 const Schedule = require('../models/Schedule');
 const whatsappService = require('./whatsappService');
 
-const ADMIN_PHONE = '+62 821-4004-4677';
+const ADMIN_PHONE = '+62 811-359-0718';
 
 // === HELPER FUNCTIONS ===
 function startOfWeekMonday(d) {
