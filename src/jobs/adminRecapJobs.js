@@ -4,6 +4,7 @@ const whatsappService = require('../services/whatsappService');
 
 const ADMIN_PHONE = '+62 821-4004-4677';
 
+// Helper: Senin awal minggu
 function startOfWeekMonday(d) {
   const date = new Date(d);
   const day = date.getDay();
@@ -13,6 +14,7 @@ function startOfWeekMonday(d) {
   return date;
 }
 
+// Helper: Minggu akhir minggu
 function endOfWeekSunday(d) {
   const startMon = startOfWeekMonday(d);
   const endSun = new Date(startMon);
@@ -21,29 +23,67 @@ function endOfWeekSunday(d) {
   return endSun;
 }
 
-function formatStudents(students, groupName) {
-  if (groupName) return `${groupName} (${(students?.length || 0)} siswa)`;
-  return (students || []).map(s => s.fullName).filter(Boolean).join(', ') || '-';
+// Helper: Rentang tanggal (misal: "16-22 FEBRUARI 2026")
+function getDateRangeText(start, end) {
+  const months = [
+    'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
+    'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'
+  ];
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const month = months[end.getMonth()];
+  const year = end.getFullYear();
+  return `${startDay}-${endDay} ${month} ${year}`;
 }
 
-function buildAdminMessage(title, coachRecaps) {
+// Helper: Nama hari Indonesia
+function getDayName(date) {
+  const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  return days[new Date(date).getDay()];
+}
+
+// Helper: Format nama coach
+function formatCoachNames(coaches) {
+  if (!coaches || coaches.length === 0) return '-';
+  return coaches.filter(Boolean).join(', ');
+}
+
+// Helper: Format nama siswa / group
+function formatStudentLabel(students, groupName) {
+  if (groupName) return groupName;
+  if (!students || students.length === 0) return '-';
+  return students.filter(Boolean).join(', ');
+}
+
+// Build pesan admin: dikelompokkan per HARI, tiap baris = waktu | siswa | coach
+function buildAdminRecapMessage(title, schedulesByDate) {
   let msg = `*${title}*\n\n`;
-  coachRecaps.sort((a, b) => (a.coachName || '').localeCompare(b.coachName || ''));
 
-  for (const c of coachRecaps) {
-    if (!c.schedules || c.schedules.length === 0) continue;
+  const sortedDates = Object.keys(schedulesByDate).sort((a, b) => new Date(a) - new Date(b));
 
-    msg += `*Coach: ${c.coachName || '-'}*\n`;
-    const schedules = (c.schedules || []).slice().sort((x, y) => (x.time || '').localeCompare(y.time || ''));
-    for (const s of schedules) {
-      // ✅ FIX: Null guard untuk location dan category
-      msg += `- ${s.time || '-'} | ${s.location || '-'} | ${formatStudents(s.students, s.groupName)} | ${s.category || '-'}\n`;
+  for (const dateStr of sortedDates) {
+    const schedules = schedulesByDate[dateStr];
+    if (!schedules || schedules.length === 0) continue;
+
+    msg += `*${getDayName(dateStr)}*\n`;
+
+    // Sort by startTime
+    const sorted = schedules.slice().sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+
+    for (const sch of sorted) {
+      const time = (sch.startTime || '??:??').substring(0, 5);
+      const student = formatStudentLabel(sch.studentNames, sch.groupName);
+      const coaches = formatCoachNames(sch.coachNames);
+      msg += `* ${time} | ${student} | ${coaches}\n`;
     }
+
     msg += '\n';
   }
+
   return msg.trim();
 }
 
+// Chunk text agar tidak melebihi batas karakter WA
 function chunkText(text, maxLen = 50000) {
   const chunks = [];
   let buf = '';
@@ -60,20 +100,31 @@ function chunkText(text, maxLen = 50000) {
 }
 
 function initAdminRecapJob() {
-  // DAILY recap (skip Monday)
+  // ============================
+  // DAILY ADMIN RECAP
+  // Setiap hari jam 06:00 (skip Senin, karena Senin = weekly)
+  // ============================
   cron.schedule('0 6 * * *', async () => {
     try {
       const now = new Date();
-      if (now.getDay() === 1) return;
+      if (now.getDay() === 1) return; // Skip Senin
 
-      const coachRecaps = await Schedule.getCoachRecapByRange(now, now);
+      const rawSchedules = await Schedule.getAdminRecapByRange(now, now);
 
-      if (!coachRecaps || coachRecaps.length === 0) return;
+      if (!rawSchedules || rawSchedules.length === 0) return;
 
-      const activeCoaches = coachRecaps.filter(c => c.schedules && c.schedules.length > 0);
-      if (activeCoaches.length === 0) return;
+      // Group by date
+      const schedulesByDate = {};
+      for (const sch of rawSchedules) {
+        const dateKey = new Date(sch.date).toISOString().split('T')[0];
+        if (!schedulesByDate[dateKey]) schedulesByDate[dateKey] = [];
+        schedulesByDate[dateKey].push(sch);
+      }
 
-      const message = buildAdminMessage('📅 REKAP HARI INI (SEMUA COACH)', activeCoaches);
+      const dateText = getDateRangeText(now, now);
+      const title = `📅 REKAP ${dateText} (HARI INI) SEMUA COACH`;
+      const message = buildAdminRecapMessage(title, schedulesByDate);
+
       for (const part of chunkText(message)) {
         await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
         await new Promise(r => setTimeout(r, 1500));
@@ -83,7 +134,10 @@ function initAdminRecapJob() {
     }
   }, { timezone: 'Asia/Jakarta' });
 
-  // WEEKLY recap setiap Senin 06:00
+  // ============================
+  // WEEKLY ADMIN RECAP
+  // Setiap Senin jam 06:00
+  // ============================
   cron.schedule('0 6 * * 1', async () => {
     console.log('🔄 Running Weekly Admin Recap...');
     try {
@@ -91,21 +145,25 @@ function initAdminRecapJob() {
       const start = startOfWeekMonday(now);
       const end = endOfWeekSunday(now);
 
-      const coachRecaps = await Schedule.getCoachRecapByRange(start, end);
+      const rawSchedules = await Schedule.getAdminRecapByRange(start, end);
 
-      if (!coachRecaps || coachRecaps.length === 0) {
+      if (!rawSchedules || rawSchedules.length === 0) {
         console.log('ℹ️ Weekly Admin Recap: Data kosong. Skip.');
         return;
       }
 
-      const activeCoaches = coachRecaps.filter(c => c.schedules && c.schedules.length > 0);
-
-      if (activeCoaches.length === 0) {
-        console.log('ℹ️ Weekly Admin Recap: Tidak ada jadwal aktif minggu ini. Skip.');
-        return;
+      // Group by date
+      const schedulesByDate = {};
+      for (const sch of rawSchedules) {
+        const dateKey = new Date(sch.date).toISOString().split('T')[0];
+        if (!schedulesByDate[dateKey]) schedulesByDate[dateKey] = [];
+        schedulesByDate[dateKey].push(sch);
       }
 
-      const message = buildAdminMessage('🗓️ REKAP 1 MINGGU (SENIN–MINGGU)', activeCoaches);
+      const dateText = getDateRangeText(start, end);
+      const title = `🗓️ REKAP ${dateText} (SENIN–MINGGU) SEMUA COACH`;
+      const message = buildAdminRecapMessage(title, schedulesByDate);
+
       for (const part of chunkText(message)) {
         await whatsappService.sendMessage(ADMIN_PHONE, part, 'info', null, { recipientName: 'ADMIN' });
         await new Promise(r => setTimeout(r, 1500));
