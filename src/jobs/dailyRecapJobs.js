@@ -1,12 +1,60 @@
 // backend/src/jobs/dailyRecapJobs.js
 const cron = require('node-cron');
 const Schedule = require('../models/Schedule');
-const Student = require('../models/Student'); // pastikan path & nama model sesuai
+const Student = require('../models/Student');
 const whatsappService = require('../services/whatsappService');
 
-function getDayName(date) {
+const TZ = 'Asia/Jakarta';
+const TZ_OFFSET = '+07:00';
+
+// ======================== TIMEZONE HELPERS ========================
+
+function getJakartaParts(d = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short'
+  });
+  const map = {};
+  for (const { type, value } of formatter.formatToParts(d)) {
+    map[type] = value;
+  }
+  return map;
+}
+
+function jakartaDate(dateStr, time = '00:00:00') {
+  return new Date(`${dateStr}T${time}${TZ_OFFSET}`);
+}
+
+function toJakartaDateStr(d) {
+  const p = getJakartaParts(d);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+function startOfWeekMondayJakarta(baseDate = new Date()) {
+  const p = getJakartaParts(baseDate);
+  const d = new Date(`${p.year}-${p.month}-${p.day}T12:00:00${TZ_OFFSET}`);
+  const dow = d.getDay();
+  const diff = (dow === 0 ? -6 : 1 - dow);
+  d.setDate(d.getDate() + diff);
+  return jakartaDate(toJakartaDateStr(d), '00:00:00');
+}
+
+function endOfWeekSaturdayJakarta(baseDate = new Date()) {
+  const mon = startOfWeekMondayJakarta(baseDate);
+  const sat = new Date(mon);
+  sat.setDate(sat.getDate() + 5);
+  return jakartaDate(toJakartaDateStr(sat), '23:59:59.999');
+}
+
+function getDayNameFromKey(dateKey) {
   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-  return days[new Date(date).getDay()];
+  const d = jakartaDate(dateKey, '12:00:00');
+  const p = getJakartaParts(d);
+  const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return days[weekdayMap[p.weekday]] || '-';
 }
 
 function getDateRangeText(start, end) {
@@ -14,44 +62,21 @@ function getDateRangeText(start, end) {
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
-  return `${start.getDate()}-${end.getDate()} ${months[end.getMonth()]} ${end.getFullYear()}`;
+  const sp = getJakartaParts(start);
+  const ep = getJakartaParts(end);
+  return `${parseInt(sp.day)}-${parseInt(ep.day)} ${months[parseInt(ep.month) - 1]} ${ep.year}`;
 }
 
-function startOfWeekMonday(d) {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = (day === 0 ? -6 : 1 - day);
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
+// ======================== LABEL HELPERS ========================
 
-function endOfWeekSaturday(d) {
-  const startMon = startOfWeekMonday(d);
-  const endSat = new Date(startMon);
-  endSat.setDate(endSat.getDate() + 5);
-  endSat.setHours(23, 59, 59, 999);
-  return endSat;
-}
-
-// === Helpers pakai data hasil populate + shortName map ===
 function getStudentLabel(sch, shortNameMap) {
   if (sch.scheduleType === 'private') {
-    const sid =
-      sch.studentId?._id?.toString() ||
-      sch.studentId?.toString();
+    const sid = sch.studentId?._id?.toString() || sch.studentId?.toString();
     const short = sid ? shortNameMap[sid] : null;
-
     if (short) return short;
-
-    return (
-      sch.studentId?.fullName ||
-      sch.studentName ||
-      '-'
-    );
+    return sch.studentId?.fullName || sch.studentName || '-';
   }
 
-  // semiPrivate & group
   const labels = (sch.students || []).map(s => {
     const id = s._id?.toString();
     const short = id ? shortNameMap[id] : null;
@@ -69,15 +94,40 @@ function getCategory(sch) {
   return 'Group Class';
 }
 
-/**
- * Build coach weekly recap data dari raw schedules (sudah di-populate)
- */
+// ======================== SHORTNAME MAP ========================
+
+async function buildShortNameMap(schedules) {
+  const studentIdsSet = new Set();
+  for (const sch of schedules) {
+    if (sch.scheduleType === 'private') {
+      const sid = sch.studentId?._id?.toString() || sch.studentId?.toString();
+      if (sid) studentIdsSet.add(sid);
+    }
+    (sch.students || []).forEach(s => {
+      const sid = s._id?.toString();
+      if (sid) studentIdsSet.add(sid);
+    });
+  }
+
+  const students = await Student.find(
+    { _id: { $in: Array.from(studentIdsSet) } },
+    { _id: 1, shortName: 1 }
+  ).lean();
+
+  const shortNameMap = {};
+  for (const st of students) {
+    if (st.shortName) shortNameMap[st._id.toString()] = st.shortName;
+  }
+  return shortNameMap;
+}
+
+// ======================== COACH RECAP BUILDER ========================
+
 function buildCoachRecaps(schedules, shortNameMap) {
   const coachMap = {};
 
   for (const sch of schedules) {
-    const date = new Date(sch.date);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toJakartaDateStr(new Date(sch.date));
     const studentLabel = getStudentLabel(sch, shortNameMap);
     const category = getCategory(sch);
     const time = `${sch.startTime || '??:??'} - ${sch.endTime || '??:??'}`;
@@ -86,11 +136,11 @@ function buildCoachRecaps(schedules, shortNameMap) {
       time,
       student: studentLabel,
       category,
-      startTime: sch.startTime || '00:00'
+      startTime: sch.startTime || '00:00',
+      dateStr
     };
 
     if (sch.scheduleType === 'private') {
-      // Coach dari coachId (populate)
       const coachName = sch.coachId?.fullName || sch.coachName || 'Coach';
       const coachPhone = sch.coachId?.phone || sch.coachPhone || null;
       const coachKey =
@@ -99,11 +149,7 @@ function buildCoachRecaps(schedules, shortNameMap) {
         coachName;
 
       if (!coachMap[coachKey]) {
-        coachMap[coachKey] = {
-          coachName,
-          coachPhone,
-          dayMap: {}
-        };
+        coachMap[coachKey] = { coachName, coachPhone, dayMap: {} };
       }
       if (coachPhone && !coachMap[coachKey].coachPhone) {
         coachMap[coachKey].coachPhone = coachPhone;
@@ -111,10 +157,7 @@ function buildCoachRecaps(schedules, shortNameMap) {
       if (!coachMap[coachKey].dayMap[dateStr]) coachMap[coachKey].dayMap[dateStr] = [];
       coachMap[coachKey].dayMap[dateStr].push(entry);
 
-    
-
-    } else if (sch.scheduleType === 'group'|| sch.scheduleType === 'semiPrivate') {
-      // Group: multiple coach di coaches[]
+    } else if (sch.scheduleType === 'group' || sch.scheduleType === 'semiPrivate') {
       const coachList = sch.coaches || [];
       if (coachList.length === 0) continue;
 
@@ -124,11 +167,7 @@ function buildCoachRecaps(schedules, shortNameMap) {
         const coachKey = coach._id?.toString() || coachName;
 
         if (!coachMap[coachKey]) {
-          coachMap[coachKey] = {
-            coachName,
-            coachPhone,
-            dayMap: {}
-          };
+          coachMap[coachKey] = { coachName, coachPhone, dayMap: {} };
         }
         if (coachPhone && !coachMap[coachKey].coachPhone) {
           coachMap[coachKey].coachPhone = coachPhone;
@@ -139,8 +178,6 @@ function buildCoachRecaps(schedules, shortNameMap) {
     }
   }
 
-  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-
   return Object.values(coachMap)
     .map(coach => ({
       coachName: coach.coachName,
@@ -148,12 +185,14 @@ function buildCoachRecaps(schedules, shortNameMap) {
       schedulesByDay: Object.keys(coach.dayMap)
         .sort()
         .map(dateStr => ({
-          dayName: dayNames[new Date(dateStr + 'T00:00:00').getDay()],
+          dayName: getDayNameFromKey(dateStr),
           schedules: coach.dayMap[dateStr].sort((a, b) => a.startTime.localeCompare(b.startTime))
         }))
     }))
     .sort((a, b) => (a.coachName || '').localeCompare(b.coachName || ''));
 }
+
+// ======================== CRON JOB ========================
 
 const initDailyRecapJob = () => {
   console.log('🕒 Daily Recap Job initialized (Schedule: Senin 06:00 AM)');
@@ -164,10 +203,9 @@ const initDailyRecapJob = () => {
 
     try {
       const now = new Date();
-      const weekStart = startOfWeekMonday(now);
-      const weekEnd = endOfWeekSaturday(now);
+      const weekStart = startOfWeekMondayJakarta(now);
+      const weekEnd   = endOfWeekSaturdayJakarta(now);
 
-      // Fetch + populate
       const schedules = await Schedule.find({
         date: { $gte: weekStart, $lte: weekEnd },
         status: 'scheduled'
@@ -184,36 +222,7 @@ const initDailyRecapJob = () => {
         return;
       }
 
-      // Kumpulkan semua studentId yang muncul (private & array)
-      const studentIdsSet = new Set();
-      for (const sch of schedules) {
-        if (sch.scheduleType === 'private') {
-          const sid =
-            sch.studentId?._id?.toString() ||
-            sch.studentId?.toString();
-          if (sid) studentIdsSet.add(sid);
-        }
-        (sch.students || []).forEach(s => {
-          const sid = s._id?.toString();
-          if (sid) studentIdsSet.add(sid);
-        });
-      }
-
-      const studentIds = Array.from(studentIdsSet);
-
-      // Ambil shortName dari koleksi Student
-      const students = await Student.find(
-        { _id: { $in: studentIds } },
-        { _id: 1, shortName: 1 }
-      ).lean();
-
-      const shortNameMap = {};
-      for (const st of students) {
-        if (st.shortName) {
-          shortNameMap[st._id.toString()] = st.shortName;
-        }
-      }
-
+      const shortNameMap = await buildShortNameMap(schedules);
       const coachRecaps = buildCoachRecaps(schedules, shortNameMap);
       const dateRange = getDateRangeText(weekStart, weekEnd);
 
@@ -236,7 +245,7 @@ const initDailyRecapJob = () => {
         for (const day of recap.schedulesByDay) {
           message += `*${day.dayName}*\n`;
           for (const sch of day.schedules) {
-            message += `* ${sch.time} | ${sch.student} \n`;
+            message += `* ${sch.time} | ${sch.student}\n`;
           }
           message += '\n';
         }
@@ -257,7 +266,7 @@ const initDailyRecapJob = () => {
     } catch (error) {
       console.error('❌ Error sending weekly coach recap:', error);
     }
-  }, { timezone: 'Asia/Jakarta' });
+  }, { timezone: TZ });
 };
 
 module.exports = initDailyRecapJob;
