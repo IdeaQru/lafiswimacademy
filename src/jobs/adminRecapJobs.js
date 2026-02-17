@@ -1,6 +1,7 @@
 // backend/src/jobs/adminRecapJobs.js
 const cron = require('node-cron');
 const Schedule = require('../models/Schedule');
+const Student = require('../models/Student'); // pakai shortName
 const whatsappService = require('../services/whatsappService');
 
 const ADMIN_PHONE = '+62 821-4004-4677';
@@ -84,22 +85,41 @@ function chunkText(text, maxLen = 50000) {
 
 /**
  * Transform raw schedule document → flat admin recap item.
- * Pakai data hasil populate:
- *   - private:     studentId.fullName, coachId.fullName
- *   - semiPrivate: students[].fullName, coachId.fullName
- *   - group:       students[].fullName, coaches[].fullName
+ * Pakai data hasil populate + shortName:
+ *   - private:     studentId.shortName || fullName, coachId.fullName
+ *   - semiPrivate: students[].shortName || fullName, coachId/fullName
+ *   - group:       students[].shortName || fullName, coaches[].fullName
  */
-function transformForAdmin(sch) {
+function transformForAdmin(sch, shortNameMap) {
   let studentLabel = '-';
   let coachLabel = '-';
 
   if (sch.scheduleType === 'private') {
-    studentLabel = sch.studentId?.fullName || sch.studentName || '-';
-    coachLabel = sch.coachId?.fullName || sch.coachName || '-';
+    const sid =
+      sch.studentId?._id?.toString() ||
+      sch.studentId?.toString();
+    const short = sid ? shortNameMap[sid] : null;
+
+    studentLabel =
+      short ||
+      sch.studentId?.fullName ||
+      sch.studentName ||
+      '-';
+
+    coachLabel =
+      sch.coachId?.fullName ||
+      sch.coachName ||
+      '-';
+
   } else if (sch.scheduleType === 'group' || sch.scheduleType === 'semiPrivate') {
     const studentNames = (sch.students || [])
-      .map(s => s.fullName || s.studentName)
+      .map(s => {
+        const id = s._id?.toString();
+        const short = id ? shortNameMap[id] : null;
+        return short || s.fullName || s.studentName;
+      })
       .filter(Boolean);
+
     studentLabel = studentNames.length > 0
       ? studentNames.join(', ')
       : (sch.groupName || '-');
@@ -119,7 +139,7 @@ function transformForAdmin(sch) {
 }
 
 /**
- * Fetch schedules + populate, lalu group per tanggal
+ * Fetch schedules + populate + shortName lalu group per tanggal
  */
 async function getAdminRecapData(startDate, endDate) {
   const start = new Date(startDate); start.setHours(0, 0, 0, 0);
@@ -138,9 +158,38 @@ async function getAdminRecapData(startDate, endDate) {
 
   if (!schedules || schedules.length === 0) return null;
 
+  // Kumpulkan semua studentId untuk shortName
+  const studentIdsSet = new Set();
+  for (const sch of schedules) {
+    if (sch.scheduleType === 'private') {
+      const sid =
+        sch.studentId?._id?.toString() ||
+        sch.studentId?.toString();
+      if (sid) studentIdsSet.add(sid);
+    }
+    (sch.students || []).forEach(s => {
+      const sid = s._id?.toString();
+      if (sid) studentIdsSet.add(sid);
+    });
+  }
+
+  const studentIds = Array.from(studentIdsSet);
+
+  const students = await Student.find(
+    { _id: { $in: studentIds } },
+    { _id: 1, shortName: 1 }
+  ).lean();
+
+  const shortNameMap = {};
+  for (const st of students) {
+    if (st.shortName) {
+      shortNameMap[st._id.toString()] = st.shortName;
+    }
+  }
+
   const schedulesByDate = {};
   for (const sch of schedules) {
-    const item = transformForAdmin(sch);
+    const item = transformForAdmin(sch, shortNameMap);
     const dateKey = new Date(item.date).toISOString().split('T')[0];
     if (!schedulesByDate[dateKey]) schedulesByDate[dateKey] = [];
     schedulesByDate[dateKey].push(item);

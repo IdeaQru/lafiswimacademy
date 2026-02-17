@@ -1,5 +1,6 @@
 // backend/src/services/recapService.js
 const Schedule = require('../models/Schedule');
+const Student = require('../models/Student');
 const whatsappService = require('./whatsappService');
 
 const ADMIN_PHONE = '+62 811-359-0718';
@@ -22,25 +23,53 @@ function endOfWeekSunday(d) {
   return endSun;
 }
 
+// Ambil awal & akhir hari “hari ini” di Asia/Jakarta (UTC+7)
+function getTodayRangeJakarta(baseDate = new Date()) {
+  const formatter = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+
+  const parts = formatter.formatToParts(baseDate);
+  const day   = parts.find(p => p.type === 'day').value;
+  const month = parts.find(p => p.type === 'month').value;
+  const year  = parts.find(p => p.type === 'year').value;
+
+  const startLocal = new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+  const endLocal   = new Date(`${year}-${month}-${day}T23:59:59.999+07:00`);
+  return { start: startLocal, end: endLocal };
+}
+
 // Nama hari Indonesia
 function getDayName(date) {
   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   return days[new Date(date).getDay()];
 }
 
-// Ambil label siswa sesuai scheduleType (pakai hasil populate)
-function getStudentLabel(schedule) {
+// Ambil label siswa sesuai scheduleType (pakai hasil populate + shortNameMap)
+function getStudentLabel(schedule, shortNameMap) {
   if (schedule.scheduleType === 'private') {
+    const sid =
+      schedule.studentId?._id?.toString() ||
+      schedule.studentId?.toString();
+    const short = sid ? shortNameMap[sid] : null;
+
+    if (short) return short;
+
     return (
-      schedule.studentId?.fullName || // dari populate
-      schedule.studentName ||         // fallback root
+      schedule.studentId?.fullName ||
+      schedule.studentName ||
       '-'
     );
   }
 
-  const names = (schedule.students || [])
-    .map(s => s.fullName || s.studentName)
-    .filter(Boolean);
+  const names = (schedule.students || []).map(s => {
+    const id = s._id?.toString();
+    const short = id ? shortNameMap[id] : null;
+    return short || s.fullName || s.studentName;
+  }).filter(Boolean);
 
   if (names.length > 0) return names.join(', ');
   return schedule.groupName || '-';
@@ -71,7 +100,7 @@ function chunkText(text, maxLen = 55000) {
 
 // ===================== ADMIN RECAP =====================
 // Format admin message: per hari, per jam awal, siswa, coach
-function buildAdminMessage(title, schedules) {
+function buildAdminMessage(title, schedules, shortNameMap) {
   let msg = `*${title}*\n\n`;
 
   // Group by date
@@ -99,7 +128,7 @@ function buildAdminMessage(title, schedules) {
 
     for (const sch of list) {
       const time = (sch.startTime || '??:??').substring(0, 5);
-      const student = getStudentLabel(sch);
+      const student = getStudentLabel(sch, shortNameMap);
       let coachLabel = '-';
 
       if (sch.scheduleType === 'private') {
@@ -124,7 +153,7 @@ function buildAdminMessage(title, schedules) {
 
 // ===================== COACH RECAP =====================
 // Flatten jadwal → per coach, per hari
-function buildCoachRecaps(schedules) {
+function buildCoachRecaps(schedules, shortNameMap) {
   const coachMap = {};
 
   for (const sch of schedules) {
@@ -132,7 +161,7 @@ function buildCoachRecaps(schedules) {
     const dateStr = date.toISOString().split('T')[0];
     const dayName = getDayName(date);
     const timeRange = `${sch.startTime || '??:??'} - ${sch.endTime || '??:??'}`;
-    const student = getStudentLabel(sch);
+    const student = getStudentLabel(sch, shortNameMap);
     const category = getCategoryLabel(sch);
 
     const entry = {
@@ -228,15 +257,20 @@ const sendRecap = async (type) => {
   const now = new Date();
 
   let start, end, adminTitle, coachTitle, isWeekly;
+
   if (type === 'weekly') {
-    start = startOfWeekMonday(now);
-    end = endOfWeekSunday(now);
+    // Weekly: Senin–Minggu minggu ini (berbasis now server, boleh Anda ubah ke Asia/Jakarta juga kalau perlu)
+    const range = getTodayRangeJakarta(now);
+    start = startOfWeekMonday(range);
+    end = endOfWeekSunday(range);
     adminTitle = '🗓️ REKAP 1 MINGGU (SENIN–MINGGU) SEMUA COACH';
     coachTitle = '🗓️ JADWAL ANDA MINGGU INI';
     isWeekly = true;
   } else {
-    start = new Date(now); start.setHours(0, 0, 0, 0);
-    end = new Date(now);   end.setHours(23, 59, 59, 999);
+    // Daily: hanya HARI INI di Asia/Jakarta (UTC+7)
+    const range = getTodayRangeJakarta(now);
+    start = range.start;
+    end = range.end;
     adminTitle = '📅 REKAP HARIAN (SEMUA COACH)';
     coachTitle = '📅 JADWAL MENGAJAR HARI INI';
     isWeekly = false;
@@ -260,8 +294,37 @@ const sendRecap = async (type) => {
       return { status: 'no_data', message: `Tidak ada jadwal ${type}.` };
     }
 
+    // Kumpulkan semua studentId untuk shortName
+    const studentIdsSet = new Set();
+    for (const sch of schedules) {
+      if (sch.scheduleType === 'private') {
+        const sid =
+          sch.studentId?._id?.toString() ||
+          sch.studentId?.toString();
+        if (sid) studentIdsSet.add(sid);
+      }
+      (sch.students || []).forEach(s => {
+        const sid = s._id?.toString();
+        if (sid) studentIdsSet.add(sid);
+      });
+    }
+
+    const studentIds = Array.from(studentIdsSet);
+
+    const students = await Student.find(
+      { _id: { $in: studentIds } },
+      { _id: 1, shortName: 1 }
+    ).lean();
+
+    const shortNameMap = {};
+    for (const st of students) {
+      if (st.shortName) {
+        shortNameMap[st._id.toString()] = st.shortName;
+      }
+    }
+
     // ===== ADMIN =====
-    const adminMsg = buildAdminMessage(adminTitle, schedules);
+    const adminMsg = buildAdminMessage(adminTitle, schedules, shortNameMap);
     for (const part of chunkText(adminMsg)) {
       await whatsappService.sendMessage(
         ADMIN_PHONE,
@@ -275,7 +338,7 @@ const sendRecap = async (type) => {
     console.log(`✅ ${type} recap sent to ADMIN.`);
 
     // ===== COACH =====
-    const coachRecaps = buildCoachRecaps(schedules);
+    const coachRecaps = buildCoachRecaps(schedules, shortNameMap);
     let coachSentCount = 0;
 
     for (const recap of coachRecaps) {
