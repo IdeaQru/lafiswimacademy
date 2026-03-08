@@ -390,11 +390,10 @@ exports.getCoachReport = async (req, res) => {
       ];
     }
 
-    // ✅ FIX: tambah shortName di semua populate students
+    // ✅ FIX: populate coachId & studentId untuk private
     const schedules = await Schedule.find(scheduleFilter)
       .populate('coachId', '_id coachId fullName specialization phone')
-      .populate('studentId', '_id studentId fullName shortName classLevel phone')   // ✅
-      .populate('students', '_id studentId fullName shortName classLevel phone')    // ✅
+      .populate('studentId', '_id studentId fullName shortName classLevel phone')
       .populate('coaches', '_id coachId fullName specialization phone')
       .lean()
       .sort({ date: -1 })
@@ -409,47 +408,101 @@ exports.getCoachReport = async (req, res) => {
       return '-';
     };
 
-    // ==================== NORMALIZE STUDENTS ====================
-    const normalizedSchedules = schedules.map(schedule => {
+    // ==================== NORMALIZE STUDENTS WITH MANUAL POPULATE ====================
+    const normalizedSchedules = await Promise.all(schedules.map(async (schedule) => {
       let students = [];
 
       if (schedule.scheduleType === 'private') {
+        // ✅ PRIVATE: gunakan studentId atau students array
         if (Array.isArray(schedule.students) && schedule.students.length > 0) {
-          students = schedule.students
-            .filter(s => s && s._id)
-            .map(s => ({
-              _id: s._id.toString(),
-              studentId: s.studentId || s._id.toString(),
-              fullName: s.fullName || 'Unknown',
-              shortName: resolveShortName(s.shortName, s.fullName),  // ✅
-              classLevel: s.classLevel || ''
-            }));
+          // Jika students array ada, cek perlu populate manual atau tidak
+          const firstStudent = schedule.students[0];
+          if (firstStudent && !firstStudent.shortName && firstStudent._id) {
+            // Populate manual ke Student collection untuk dapat shortName
+            const studentDoc = await Student.findById(firstStudent._id)
+              .select('_id studentId fullName shortName classLevel phone')
+              .lean();
+            if (studentDoc) {
+              students = [{
+                _id: studentDoc._id.toString(),
+                studentId: studentDoc.studentId || studentDoc._id.toString(),
+                fullName: studentDoc.fullName || 'Unknown',
+                shortName: resolveShortName(studentDoc.shortName, studentDoc.fullName),
+                classLevel: studentDoc.classLevel || ''
+              }];
+            }
+          } else {
+            // Sudah ada data, gunakan langsung
+            students = schedule.students
+              .filter(s => s && s._id)
+              .map(s => ({
+                _id: s._id.toString(),
+                studentId: s.studentId || s._id.toString(),
+                fullName: s.fullName || 'Unknown',
+                shortName: resolveShortName(s.shortName, s.fullName),
+                classLevel: s.classLevel || ''
+              }));
+          }
         } else if (schedule.studentId && schedule.studentId._id) {
+          // Gunakan studentId yang sudah di-populate
           const s = schedule.studentId;
           students = [{
             _id: s._id.toString(),
             studentId: s.studentId || s._id.toString(),
             fullName: s.fullName || 'Unknown',
-            shortName: resolveShortName(s.shortName, s.fullName),  // ✅
+            shortName: resolveShortName(s.shortName, s.fullName),
             classLevel: s.classLevel || ''
           }];
         }
       } else if (schedule.scheduleType === 'semiPrivate' || schedule.scheduleType === 'group') {
-        if (Array.isArray(schedule.students)) {
-          students = schedule.students
-            .filter(s => s && s._id)
-            .map(s => ({
-              _id: s._id.toString(),
-              studentId: s.studentId || s._id.toString(),
-              fullName: s.fullName || 'Unknown',
-              shortName: resolveShortName(s.shortName, s.fullName),  // ✅
-              classLevel: s.classLevel || ''
-            }));
+        // ✅ SEMI PRIVATE & GROUP: populate manual untuk dapat shortName
+        if (Array.isArray(schedule.students) && schedule.students.length > 0) {
+          // Cek apakah perlu populate manual (tidak ada shortName)
+          const needsPopulate = schedule.students.some(s => s && s._id && !s.shortName);
+
+          if (needsPopulate) {
+            // Populate manual ke Student collection untuk semua students
+            const studentIds = schedule.students.map(s => s._id).filter(id => id);
+            const studentDocs = await Student.find({ _id: { $in: studentIds } })
+              .select('_id studentId fullName shortName classLevel phone')
+              .lean();
+
+            // Buat map untuk quick lookup
+            const studentMap = {};
+            studentDocs.forEach(doc => {
+              studentMap[doc._id.toString()] = doc;
+            });
+
+            // Map students dengan data lengkap dari Student collection
+            students = schedule.students
+              .filter(s => s && s._id && studentMap[s._id.toString()])
+              .map(s => {
+                const doc = studentMap[s._id.toString()];
+                return {
+                  _id: doc._id.toString(),
+                  studentId: doc.studentId || doc._id.toString(),
+                  fullName: doc.fullName || 'Unknown',
+                  shortName: resolveShortName(doc.shortName, doc.fullName),
+                  classLevel: doc.classLevel || ''
+                };
+              });
+          } else {
+            // Sudah ada shortName, gunakan langsung
+            students = schedule.students
+              .filter(s => s && s._id)
+              .map(s => ({
+                _id: s._id.toString(),
+                studentId: s.studentId || s._id.toString(),
+                fullName: s.fullName || 'Unknown',
+                shortName: resolveShortName(s.shortName, s.fullName),
+                classLevel: s.classLevel || ''
+              }));
+          }
         }
       }
 
       return { ...schedule, students };
-    });
+    }));
 
     console.log(`✅ ${normalizedSchedules.length} schedules normalized`);
 
