@@ -430,7 +430,6 @@ exports.getCoachReport = async (req, res) => {
     const startTime = Date.now();
     const { startDate, endDate, coachId } = req.query;
 
-    // Validasi tanggal input
     if (!startDate || !endDate) {
       return res.status(400).json({ success: false, message: 'startDate dan endDate required' });
     }
@@ -440,7 +439,6 @@ exports.getCoachReport = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid date format' });
     }
 
-    // Permission handling untuk role coach
     let userCoachObjectId = null;
     if (req.user?.role === 'coach') {
       if (!req.user?.coachId) {
@@ -452,7 +450,6 @@ exports.getCoachReport = async (req, res) => {
       }
     }
 
-    // Bangun filter query schedule berdasarkan tanggal dan akses user
     const scheduleFilter = { date: { $gte: start, $lte: end } };
     if (userCoachObjectId) {
       scheduleFilter.$or = [
@@ -461,15 +458,15 @@ exports.getCoachReport = async (req, res) => {
       ];
     }
 
-    // Ambil data schedule dengan populate lengkap
+    // ✅ FIX: tambah shortName di semua populate
     const schedules = await Schedule.find(scheduleFilter)
       .populate('coachId', '_id coachId fullName')
-      .populate('studentId', '_id studentId fullName classLevel')
-      .populate('students', '_id studentId fullName classLevel')
+      .populate('studentId', '_id studentId fullName shortName classLevel')  // ✅ shortName
+      .populate('students', '_id studentId fullName shortName classLevel')   // ✅ shortName
       .populate('coaches', '_id coachId fullName')
       .lean()
       .sort({ date: -1 })
-      .limit(500) // batasi default agar tidak terlalu berat
+      .limit(500)
       .exec();
 
     if (schedules.length === 0) {
@@ -479,27 +476,42 @@ exports.getCoachReport = async (req, res) => {
           stats: { totalCoaches: 0, totalSessions: 0, totalEvaluations: 0 },
           coachReports: []
         },
-        meta: { duration: `${Date.now() - startTime}ms`, dateRange: { startDate, endDate }, userRole: req.user?.role, timestamp: new Date().toISOString() }
+        meta: {
+          duration: `${Date.now() - startTime}ms`,
+          dateRange: { startDate, endDate },
+          userRole: req.user?.role,
+          timestamp: new Date().toISOString()
+        }
       });
     }
 
-    // Normalisasi schedules -> pastikan students & mainCoach terisi dengan struktur benar
+    // ✅ Helper: resolve shortName konsisten
+    const resolveShortName = (shortName, fullName) => {
+      if (shortName && shortName.trim()) return shortName.trim();
+      if (fullName && fullName.trim()) return fullName.trim().split(' ')[0];
+      return '-';
+    };
+
+    // ✅ FIX: Normalisasi + shortName di semua tipe schedule
     const normalizedSchedules = schedules.map(schedule => {
       let students = [];
       let mainCoach = null;
 
       if (schedule.scheduleType === 'private') {
+        // Prioritas: dari array students, fallback ke studentId populated
         students = Array.isArray(schedule.students) && schedule.students.length > 0
           ? schedule.students.map(s => ({
               _id: s._id.toString(),
               studentId: s.studentId,
               fullName: s.fullName,
+              shortName: resolveShortName(s.shortName, s.fullName),  // ✅
               classLevel: s.classLevel || ''
             }))
           : [schedule.studentId ? {
               _id: schedule.studentId._id.toString(),
               studentId: schedule.studentId.studentId,
               fullName: schedule.studentId.fullName || 'Unknown',
+              shortName: resolveShortName(schedule.studentId.shortName, schedule.studentId.fullName),  // ✅
               classLevel: schedule.studentId.classLevel || ''
             } : null].filter(Boolean);
 
@@ -510,28 +522,27 @@ exports.getCoachReport = async (req, res) => {
             fullName: schedule.coachId.fullName
           };
         }
+
       } else if (['semiPrivate', 'group'].includes(schedule.scheduleType)) {
         students = (schedule.students || []).map(s => ({
           _id: s._id.toString(),
           studentId: s.studentId,
           fullName: s.fullName,
+          shortName: resolveShortName(s.shortName, s.fullName),  // ✅
           classLevel: s.classLevel || ''
         }));
 
         if (Array.isArray(schedule.coaches) && schedule.coaches.length > 0) {
           if (userCoachObjectId) {
-            const matchedCoach = schedule.coaches.find(c => c._id.toString() === userCoachObjectId.toString());
-            mainCoach = matchedCoach
-              ? {
-                  _id: matchedCoach._id.toString(),
-                  coachId: matchedCoach.coachId,
-                  fullName: matchedCoach.fullName
-                }
-              : {
-                  _id: schedule.coaches[0]._id.toString(),
-                  coachId: schedule.coaches[0].coachId,
-                  fullName: schedule.coaches[0].fullName
-                };
+            const matchedCoach = schedule.coaches.find(
+              c => c._id.toString() === userCoachObjectId.toString()
+            );
+            const targetCoach = matchedCoach || schedule.coaches[0];
+            mainCoach = {
+              _id: targetCoach._id.toString(),
+              coachId: targetCoach.coachId,
+              fullName: targetCoach.fullName
+            };
           } else {
             mainCoach = {
               _id: schedule.coaches[0]._id.toString(),
@@ -545,15 +556,15 @@ exports.getCoachReport = async (req, res) => {
       return { ...schedule, students, mainCoach };
     });
 
-    // Ambil evaluations untuk jadwal-jadwal yang telah dinormalisasi
+    // Ambil evaluations
     const scheduleIds = normalizedSchedules.map(s => s._id);
     const evaluations = await TrainingEvaluation.find({ scheduleId: { $in: scheduleIds } })
-      .populate('studentId', '_id studentId fullName classLevel')
+      .populate('studentId', '_id studentId fullName shortName classLevel')  // ✅ shortName
       .populate('coachIds', '_id coachId fullName')
       .lean()
       .exec();
 
-    // Buat map evaluasi berdasarkan scheduleId
+    // Map evaluations by scheduleId
     const evaluationMap = new Map();
     evaluations.forEach(ev => {
       const scheduleId = ev.scheduleId.toString();
@@ -566,7 +577,7 @@ exports.getCoachReport = async (req, res) => {
       });
     });
 
-    // Bangun map informasi per coach
+    // Build coach map
     const coachMap = new Map();
 
     normalizedSchedules.forEach(schedule => {
@@ -585,7 +596,6 @@ exports.getCoachReport = async (req, res) => {
           cancelledSessions: 0,
           upcomingSessions: 0,
           totalStudents: new Set(),
-          scheduleTypeStats: new Map(),
           sessions: []
         });
       }
@@ -596,7 +606,11 @@ exports.getCoachReport = async (req, res) => {
       const scheduleEvaluations = evaluationMap.get(schedule._id.toString()) || [];
       const students = schedule.students || [];
 
-      // Floodlight status logic (hadir, batal, upcoming) bisa tetap Anda implementasikan di sini...
+      // Status logic
+      const statusLower = schedule.status?.toLowerCase() || '';
+      if (['completed', 'selesai'].includes(statusLower)) coachData.completedSessions++;
+      else if (['cancelled', 'batal'].includes(statusLower)) coachData.cancelledSessions++;
+      else if (['scheduled', 'pending', 'active'].includes(statusLower)) coachData.upcomingSessions++;
 
       students.forEach(s => coachData.totalStudents.add(s._id));
 
@@ -609,29 +623,24 @@ exports.getCoachReport = async (req, res) => {
         scheduleTime: `${schedule.startTime} - ${schedule.endTime}`,
         location: schedule.location || 'N/A',
         status: schedule.status,
+        groupName: schedule.groupName || null,
         studentCount: students.length,
-        students,
+        students,          // ✅ sudah include shortName
         evaluations: scheduleEvaluations
       });
     });
 
-    // Format hasil akhir dalam array
-    const coachReports = Array.from(coachMap.values()).map(coach => {
-      // Format stats jika diperlukan...
+    const coachReports = Array.from(coachMap.values()).map(coach => ({
+      coachId: coach.coachId,
+      coachName: coach.coachName,
+      totalSessions: coach.totalSessions,
+      completedSessions: coach.completedSessions,
+      cancelledSessions: coach.cancelledSessions,
+      upcomingSessions: coach.upcomingSessions,
+      totalStudents: coach.totalStudents.size,
+      sessions: coach.sessions
+    }));
 
-      return {
-        coachId: coach.coachId,
-        coachName: coach.coachName,
-        totalSessions: coach.totalSessions,
-        completedSessions: coach.completedSessions || 0,
-        cancelledSessions: coach.cancelledSessions || 0,
-        upcomingSessions: coach.upcomingSessions || 0,
-        totalStudents: coach.totalStudents.size,
-        sessions: coach.sessions
-      };
-    });
-
-    // Kirim respon JSON
     res.status(200).json({
       success: true,
       data: {
@@ -649,14 +658,13 @@ exports.getCoachReport = async (req, res) => {
         timestamp: new Date().toISOString()
       }
     });
+
   } catch (error) {
     console.error('❌ [COACH REPORT] ERROR', error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 
 

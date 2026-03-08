@@ -364,7 +364,7 @@ exports.getCoachReport = async (req, res) => {
     console.log('='.repeat(100));
 
     const scheduleFilter = {};
-    
+
     if (startDate && endDate) {
       scheduleFilter.date = {
         $gte: new Date(startDate),
@@ -373,7 +373,6 @@ exports.getCoachReport = async (req, res) => {
     }
 
     let coachObjectId = null;
-    
     if (coachId) {
       if (coachId.match(/^[0-9a-fA-F]{24}$/)) {
         coachObjectId = new mongoose.Types.ObjectId(coachId);
@@ -391,10 +390,11 @@ exports.getCoachReport = async (req, res) => {
       ];
     }
 
+    // ✅ FIX: tambah shortName di semua populate students
     const schedules = await Schedule.find(scheduleFilter)
       .populate('coachId', '_id coachId fullName specialization phone')
-      .populate('studentId', '_id studentId fullName classLevel phone')
-      .populate('students', '_id studentId fullName classLevel phone')
+      .populate('studentId', '_id studentId fullName shortName classLevel phone')   // ✅
+      .populate('students', '_id studentId fullName shortName classLevel phone')    // ✅
       .populate('coaches', '_id coachId fullName specialization phone')
       .lean()
       .sort({ date: -1 })
@@ -402,38 +402,47 @@ exports.getCoachReport = async (req, res) => {
 
     console.log(`✅ Found ${schedules.length} schedules`);
 
-    // ==================== NORMALIZE STUDENTS - WITH SAFE CHECKS ====================
+    // ✅ Helper: resolve shortName konsisten
+    const resolveShortName = (shortName, fullName) => {
+      if (shortName && shortName.trim()) return shortName.trim();
+      if (fullName && fullName.trim()) return fullName.trim().split(' ')[0];
+      return '-';
+    };
+
+    // ==================== NORMALIZE STUDENTS ====================
     const normalizedSchedules = schedules.map(schedule => {
       let students = [];
 
       if (schedule.scheduleType === 'private') {
         if (Array.isArray(schedule.students) && schedule.students.length > 0) {
           students = schedule.students
-            .filter(s => s && s._id)  // ✅ Filter null
+            .filter(s => s && s._id)
             .map(s => ({
               _id: s._id.toString(),
               studentId: s.studentId || s._id.toString(),
               fullName: s.fullName || 'Unknown',
+              shortName: resolveShortName(s.shortName, s.fullName),  // ✅
               classLevel: s.classLevel || ''
             }));
-        }
-        else if (schedule.studentId && schedule.studentId._id) {
+        } else if (schedule.studentId && schedule.studentId._id) {
           const s = schedule.studentId;
           students = [{
             _id: s._id.toString(),
             studentId: s.studentId || s._id.toString(),
             fullName: s.fullName || 'Unknown',
+            shortName: resolveShortName(s.shortName, s.fullName),  // ✅
             classLevel: s.classLevel || ''
           }];
         }
       } else if (schedule.scheduleType === 'semiPrivate' || schedule.scheduleType === 'group') {
         if (Array.isArray(schedule.students)) {
           students = schedule.students
-            .filter(s => s && s._id)  // ✅ Filter null
+            .filter(s => s && s._id)
             .map(s => ({
               _id: s._id.toString(),
               studentId: s.studentId || s._id.toString(),
               fullName: s.fullName || 'Unknown',
+              shortName: resolveShortName(s.shortName, s.fullName),  // ✅
               classLevel: s.classLevel || ''
             }));
         }
@@ -446,26 +455,24 @@ exports.getCoachReport = async (req, res) => {
 
     // ==================== GET EVALUATIONS ====================
     const scheduleIds = normalizedSchedules.map(s => s._id);
-    
+
     const evaluations = await TrainingEvaluation
       .find({ scheduleId: { $in: scheduleIds } })
-      .populate('studentId', '_id studentId fullName classLevel')
+      .populate('studentId', '_id studentId fullName shortName classLevel')  // ✅
       .populate('coachIds', 'coachId fullName')
       .lean()
       .exec();
 
     console.log(`✅ Found ${evaluations.length} evaluations`);
 
-    // ==================== BUILD MAPS WITH SAFE CHECKS ====================
+    // ==================== BUILD EVALUATION MAP ====================
     const evaluationMap = {};
     evaluations.forEach(ev => {
-      if (!ev.scheduleId) return;  // ✅ Skip if no scheduleId
-      
+      if (!ev.scheduleId) return;
+
       const scheduleId = ev.scheduleId.toString();
-      if (!evaluationMap[scheduleId]) {
-        evaluationMap[scheduleId] = [];
-      }
-      
+      if (!evaluationMap[scheduleId]) evaluationMap[scheduleId] = [];
+
       evaluationMap[scheduleId].push({
         studentId: ev.studentId?._id?.toString() || '',
         studentName: ev.studentId?.fullName || 'Unknown',
@@ -473,11 +480,11 @@ exports.getCoachReport = async (req, res) => {
         attendance: ev.attendance,
         notes: ev.notes || '',
         coachNames: (ev.coachIds || [])
-          .filter(c => c && c.fullName)  // ✅ Filter null coaches
+          .filter(c => c && c.fullName)
           .map(c => c.fullName)
           .join(', '),
         coachEvaluations: (ev.coachIds || [])
-          .filter(c => c && c._id)  // ✅ Filter null
+          .filter(c => c && c._id)
           .map(c => ({
             coachId: c._id.toString(),
             coachName: c.fullName || 'Unknown',
@@ -492,26 +499,27 @@ exports.getCoachReport = async (req, res) => {
       });
     });
 
-    // ==================== BUILD COACH MAP WITH SAFE CHECKS ====================
+    // ==================== BUILD COACH MAP ====================
     const coachMap = {};
-    
-    normalizedSchedules.forEach((schedule) => {
+
+    normalizedSchedules.forEach(schedule => {
       let coachsForThisSchedule = [];
 
       if (schedule.scheduleType === 'private' && schedule.coachId && schedule.coachId._id) {
         coachsForThisSchedule = [schedule.coachId];
-      } 
-      else if ((schedule.scheduleType === 'semiPrivate' || schedule.scheduleType === 'group') 
-               && Array.isArray(schedule.coaches)) {
-        coachsForThisSchedule = schedule.coaches.filter(c => c && c._id);  // ✅ Filter null
+      } else if (
+        (schedule.scheduleType === 'semiPrivate' || schedule.scheduleType === 'group') &&
+        Array.isArray(schedule.coaches)
+      ) {
+        coachsForThisSchedule = schedule.coaches.filter(c => c && c._id);
       }
 
-      coachsForThisSchedule.forEach((coach) => {
-        if (!coach || !coach._id) return;  // ✅ Skip if invalid
+      coachsForThisSchedule.forEach(coach => {
+        if (!coach || !coach._id) return;
 
         const coachObjectId = coach._id.toString();
         const coachKey = coach.coachId || coachObjectId;
-        
+
         if (!coachMap[coachKey]) {
           coachMap[coachKey] = {
             coachId: coachKey,
@@ -527,22 +535,16 @@ exports.getCoachReport = async (req, res) => {
         }
 
         coachMap[coachKey].totalSessions++;
-        
-        if (schedule.status === 'completed') {
-          coachMap[coachKey].completedSessions++;
-        } else if (schedule.status === 'cancelled') {
-          coachMap[coachKey].cancelledSessions++;
-        } else if (new Date(schedule.date) > new Date()) {
-          coachMap[coachKey].upcomingSessions++;
-        }
+
+        if (schedule.status === 'completed') coachMap[coachKey].completedSessions++;
+        else if (schedule.status === 'cancelled') coachMap[coachKey].cancelledSessions++;
+        else if (new Date(schedule.date) > new Date()) coachMap[coachKey].upcomingSessions++;
 
         const scheduleEvaluations = evaluationMap[schedule._id.toString()] || [];
         const students = schedule.students || [];
 
         students.forEach(s => {
-          if (s && s._id) {  // ✅ Check before add
-            coachMap[coachKey].totalStudents.add(s._id);
-          }
+          if (s && s._id) coachMap[coachKey].totalStudents.add(s._id);
         });
 
         coachMap[coachKey].sessions.push({
@@ -556,7 +558,7 @@ exports.getCoachReport = async (req, res) => {
           location: schedule.location || 'N/A',
           status: schedule.status,
           studentCount: students.length,
-          students: students,
+          students,         // ✅ sudah include shortName
           evaluations: scheduleEvaluations
         });
       });
@@ -577,26 +579,32 @@ exports.getCoachReport = async (req, res) => {
 
     console.log('\n' + '='.repeat(100));
     console.log('✅ FINAL RESULT:');
+    coachReports.forEach(c => {
+      console.log(`   Coach: ${c.coachName} | Sessions: ${c.totalSessions}`);
+      c.sessions.forEach((s, idx) => {
+        const shortNameCheck = s.students.map(st => st.shortName).join(', ');
+        console.log(`     [${idx}] ${s.scheduleType}: ${s.students.length} students | shortNames: ${shortNameCheck}`);
+      });
+    });
     console.log('='.repeat(100));
-
-    const data = {
-      stats: {
-        totalCoaches: coachReports.length,
-        totalSessions: normalizedSchedules.length,
-        totalEvaluations: evaluations.length
-      },
-      coachReports
-    };
 
     res.status(200).json({
       success: true,
-      data,
+      data: {
+        stats: {
+          totalCoaches: coachReports.length,
+          totalSessions: normalizedSchedules.length,
+          totalEvaluations: evaluations.length
+        },
+        coachReports
+      },
       meta: {
         dateRange: { startDate, endDate },
         filteredCoach: coachId || 'all',
         timestamp: new Date().toISOString()
       }
     });
+
   } catch (error) {
     console.error('❌ Error in getCoachReport:', error);
     res.status(500).json({
@@ -606,6 +614,7 @@ exports.getCoachReport = async (req, res) => {
     });
   }
 };
+
 
 
 // ==================== GET STUDENT HISTORY ====================
