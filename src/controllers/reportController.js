@@ -259,7 +259,7 @@ exports.getStudentsListWithStats = async (req, res) => {
 
     // Get students
     const students = await Student.find(studentFilter)
-      .select('_id studentId fullName phone classLevel status photo enrollmentDate')
+      .select('_id studentId fullName shortName phone classLevel status photo enrollmentDate')
       .sort({ fullName: 1 })
       .lean();
 
@@ -343,6 +343,7 @@ exports.getStudentsListWithStats = async (req, res) => {
         _id: student._id.toString(),
         studentId: student.studentId,
         fullName: student.fullName,
+        shortName:student.shortName,
         phone: student.phone || null,
         classLevel: student.classLevel,
         status: student.status,
