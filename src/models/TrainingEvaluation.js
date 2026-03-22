@@ -153,27 +153,64 @@ trainingEvaluationSchema.methods.rebuildCombinedNotes = function() {
 trainingEvaluationSchema.statics.getMonthCount = async function(studentId, year, month) {
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0, 23, 59, 59);
-  
-  const count = await this.countDocuments({
-    studentId: mongoose.Types.ObjectId.isValid(studentId) 
-      ? new mongoose.Types.ObjectId(studentId)
-      : studentId,
+
+  const studentObjectId = mongoose.Types.ObjectId.isValid(studentId)
+    ? new mongoose.Types.ObjectId(studentId)
+    : studentId;
+
+  // ✅ Count evaluations dengan attendance 'Hadir'
+  const evaluationsCount = await this.countDocuments({
+    studentId: studentObjectId,
     attendance: 'Hadir',
     trainingDate: { $gte: startDate, $lte: endDate }
   });
-  
-  return count;
+
+  // ✅ Count cancelled schedules sebagai penalty
+  const Schedule = mongoose.model('Schedule');
+  const cancelledCount = await Schedule.countDocuments({
+    $or: [
+      { studentId: studentObjectId },           // Private sessions
+      { students: { $in: [studentObjectId] } }  // Semi-private & Group sessions
+    ],
+    status: 'cancelled',
+    date: { $gte: startDate, $lte: endDate }
+  });
+
+  console.log(`📊 getMonthCount for student ${studentObjectId}:`);
+  console.log(`   - Evaluations (Hadir): ${evaluationsCount}`);
+  console.log(`   - Cancelled Schedules: ${cancelledCount}`);
+  console.log(`   - Total: ${evaluationsCount + cancelledCount}`);
+
+  return evaluationsCount + cancelledCount;
 };
 
 trainingEvaluationSchema.statics.getTotalCount = async function(studentId) {
-  const count = await this.countDocuments({
-    studentId: mongoose.Types.ObjectId.isValid(studentId) 
-      ? new mongoose.Types.ObjectId(studentId)
-      : studentId,
+  const studentObjectId = mongoose.Types.ObjectId.isValid(studentId)
+    ? new mongoose.Types.ObjectId(studentId)
+    : studentId;
+
+  // ✅ Count evaluations dengan attendance 'Hadir'
+  const evaluationsCount = await this.countDocuments({
+    studentId: studentObjectId,
     attendance: 'Hadir'
   });
-  
-  return count;
+
+  // ✅ Count SEMUA cancelled schedules sebagai penalty
+  const Schedule = mongoose.model('Schedule');
+  const cancelledCount = await Schedule.countDocuments({
+    $or: [
+      { studentId: studentObjectId },           // Private sessions
+      { students: { $in: [studentObjectId] } }  // Semi-private & Group sessions
+    ],
+    status: 'cancelled'
+  });
+
+  console.log(`📊 getTotalCount for student ${studentObjectId}:`);
+  console.log(`   - Evaluations (Hadir): ${evaluationsCount}`);
+  console.log(`   - Cancelled Schedules: ${cancelledCount}`);
+  console.log(`   - Total: ${evaluationsCount + cancelledCount}`);
+
+  return evaluationsCount + cancelledCount;
 };
 
 trainingEvaluationSchema.statics.getProgress = async function(studentId) {

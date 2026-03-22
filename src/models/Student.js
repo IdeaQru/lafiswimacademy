@@ -195,81 +195,40 @@ studentSchema.pre('save', function(next) {
 // ==================== INSTANCE METHODS ====================
 
 /**
- * ✅ Get total training count dari TrainingEvaluation collection
+ * ✅ Get total training count dari TrainingEvaluation collection + Cancelled Schedules
  */
 studentSchema.methods.getTotalTrainingCount = async function() {
   const TrainingEvaluation = require('./TrainingEvaluation');
-  
-  const count = await TrainingEvaluation.countDocuments({
-    studentId: this._id,
-    attendance: 'Hadir'
-  });
-  
+
+  // ✅ Gunakan static method yang sudah include cancelled schedules
+  const count = await TrainingEvaluation.getTotalCount(this._id);
+
   console.log(`✅ Total training count for ${this.fullName}: ${count}`);
   return count;
 };
 
 /**
- * ✅ Get training count untuk specific month dari TrainingEvaluation
+ * ✅ Get training count untuk specific month dari TrainingEvaluation + Cancelled Schedules
  */
 studentSchema.methods.getMonthTrainingCount = async function(year, month) {
   const TrainingEvaluation = require('./TrainingEvaluation');
-  
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0, 23, 59, 59);
-  
-  const count = await TrainingEvaluation.countDocuments({
-    studentId: this._id,
-    attendance: 'Hadir',
-    trainingDate: {
-      $gte: startDate,
-      $lte: endDate
-    }
-  });
-  
+
+  // ✅ Gunakan static method yang sudah include cancelled schedules
+  const count = await TrainingEvaluation.getMonthCount(this._id, year, month);
+
   console.log(`✅ Training count for ${this.fullName} ${year}-${month}: ${count}`);
   return count;
 };
 
 /**
- * ✅ Get training progress (bulan ini vs total vs carryover)
+ * ✅ Get training progress (bulan ini vs total vs carryover) + Cancelled Schedules
  */
 studentSchema.methods.getTrainingProgress = async function() {
   const TrainingEvaluation = require('./TrainingEvaluation');
-  
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-  
-  // Count bulan ini
-  const startDate = new Date(currentYear, currentMonth, 1);
-  const endDate = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
-  
-  const monthCount = await TrainingEvaluation.countDocuments({
-    studentId: this._id,
-    attendance: 'Hadir',
-    trainingDate: {
-      $gte: startDate,
-      $lte: endDate
-    }
-  });
-  
-  // Total semua
-  const totalCount = await TrainingEvaluation.countDocuments({
-    studentId: this._id,
-    attendance: 'Hadir'
-  });
-  
-  // Carry over
-  const carryOver = totalCount - monthCount;
-  
-  const progress = {
-    monthCount,
-    totalCount,
-    carryOver,
-    message: `${monthCount} bulan ini, ${carryOver} dari bulan lalu = ${totalCount} total`
-  };
-  
+
+  // ✅ Gunakan static method yang sudah include cancelled schedules
+  const progress = await TrainingEvaluation.getProgress(this._id);
+
   console.log(`✅ Progress for ${this.fullName}:`, progress);
   return progress;
 };
