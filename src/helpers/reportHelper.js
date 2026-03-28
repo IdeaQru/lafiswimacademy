@@ -389,18 +389,53 @@ async function getCoachExportData(startDate, endDate, coachId = null, userRole =
     });
 
     // ==================== FORMAT RESPONSE ====================
-    const coaches = Object.values(coachMap).map(coach => ({
-      name: coach.name,
-      id: coach.coachId,
-      totalSessions: coach.totalSessions,
-      scheduleTypeStats: Object.keys(coach.scheduleTypeStats)
-        .map(typeKey => ({
-          ...coach.scheduleTypeStats[typeKey],
-          typeKey: typeKey
-        }))
-        .sort((a, b) => b.total - a.total),
-      sessions: coach.sessions
-    }));
+    const coaches = Object.values(coachMap).map(coach => {
+      // ✅ AGGREGATE SCHEDULE TYPE STATS - Group by schedule type only (Private, Semi-Private, Group)
+      const aggregatedByType = {
+        'Private': { total: 0, completed: 0, cancelled: 0 },
+        'Semi-Private': { total: 0, completed: 0, cancelled: 0 },
+        'Group': { total: 0, completed: 0, cancelled: 0 }
+      };
+
+      // Aggregate all categories into their schedule types
+      Object.keys(coach.scheduleTypeStats).forEach(typeKey => {
+        const stat = coach.scheduleTypeStats[typeKey];
+        const scheduleType = stat.scheduleType;
+
+        let typeLabel = 'Private';
+        if (scheduleType === 'semiPrivate') {
+          typeLabel = 'Semi-Private';
+        } else if (scheduleType === 'group') {
+          typeLabel = 'Group';
+        }
+
+        aggregatedByType[typeLabel].total += stat.total;
+        aggregatedByType[typeLabel].completed += stat.completed;
+        aggregatedByType[typeLabel].cancelled += stat.cancelled;
+      });
+
+      // Convert aggregated data to array format for PDF rendering
+      const simpleStats = [
+        { type: 'Private', ...aggregatedByType['Private'] },
+        { type: 'Semi-Private', ...aggregatedByType['Semi-Private'] },
+        { type: 'Group', ...aggregatedByType['Group'] }
+      ];
+
+      console.log(`\n   📊 Stats for ${coach.name}:`);
+      console.log(`      Before aggregation: ${Object.keys(coach.scheduleTypeStats).length} categories`);
+      console.log(`      After aggregation: ${simpleStats.length} schedule types`);
+      simpleStats.forEach(s => {
+        console.log(`         ${s.type}: Total=${s.total}, Selesai=${s.completed}, Bensin=${s.cancelled}`);
+      });
+
+      return {
+        name: coach.name,
+        id: coach.coachId,
+        totalSessions: coach.totalSessions,
+        scheduleTypeStats: simpleStats, // ✅ Use aggregated stats (3 rows only)
+        sessions: coach.sessions
+      };
+    });
 
     console.log('\n' + '='.repeat(100));
     console.log('✅ Coach export data COMPLETE');
@@ -695,10 +730,10 @@ async function renderCoachPDF(doc, coaches, margins) {
 
       doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981');
       doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
-        .text('Schedule Type (Kategori)', 60, y + 3, { width: 200 })
+        .text('Schedule Type', 60, y + 3, { width: 200 })
         .text('Total', 265, y + 3, { width: 35 })
         .text('Selesai', 305, y + 3, { width: 35 })
-        .text('Batal', 345, y + 3, { width: 35 });
+        .text('Bensin', 345, y + 3, { width: 35 }); // ✅ RENAME: Batal → Bensin
 
       y += 16;
 
@@ -707,13 +742,29 @@ async function renderCoachPDF(doc, coaches, margins) {
         doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
 
         doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-          .text(stat.typeKey || `${stat.scheduleType} (${stat.programCategory})`, 60, y + 2, { width: 200 })
+          .text(stat.type, 60, y + 2, { width: 200 }) // ✅ Use aggregated type (Private, Semi-Private, Group)
           .text(stat.total.toString(), 265, y + 2, { width: 35 })
           .text(stat.completed.toString(), 305, y + 2, { width: 35 })
-          .text(stat.cancelled.toString(), 345, y + 2, { width: 35 });
+          .text(stat.cancelled.toString(), 345, y + 2, { width: 35 }); // ✅ Shows "Bensin" values
 
         y += 12;
       });
+
+      // ✅ ADD TOTAL ROW
+      const grandTotal = coach.scheduleTypeStats.reduce((sum, stat) => ({
+        total: sum.total + stat.total,
+        completed: sum.completed + stat.completed,
+        cancelled: sum.cancelled + stat.cancelled
+      }), { total: 0, completed: 0, cancelled: 0 });
+
+      doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981'); // Green background for TOTAL
+      doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+        .text('TOTAL', 60, y + 3, { width: 200 })
+        .text(grandTotal.total.toString(), 265, y + 3, { width: 35 })
+        .text(grandTotal.completed.toString(), 305, y + 3, { width: 35 })
+        .text(grandTotal.cancelled.toString(), 345, y + 3, { width: 35 });
+
+      y += 16;
 
       y += 8;
     }
