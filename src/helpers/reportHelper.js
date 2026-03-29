@@ -810,8 +810,10 @@ async function renderCoachPDF(doc, coaches, margins) {
 
           session.evaluations.forEach((athlete, aidx) => {
             if (y > doc.page.height - margins.bottom - safeOffset) {
+              console.log(`🔄 Page break at evaluation ${aidx + 1}/${session.evaluations.length}, y=${y}, page.height=${doc.page.height}, margins.bottom=${margins.bottom}, safeOffset=${safeOffset}`);
               doc.addPage();
               y = margins.top;
+              console.log(`✅ New page started, y reset to ${y}`);
             }
 
             const bgColor = aidx % 2 === 0 ? '#f9fafb' : '#ffffff';
