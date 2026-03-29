@@ -764,9 +764,13 @@ async function renderCoachPDF(doc, coaches, margins) {
         .text(grandTotal.completed.toString(), 305, y + 3, { width: 35 })
         .text(grandTotal.cancelled.toString(), 345, y + 3, { width: 35 });
 
-      y += 16;
+      y += 20; // ✅ Reduced spacing: was 16 + 8 = 24, now 20
+    }
 
-      y += 8;
+    // ✅ Check page break before session list
+    if (y > doc.page.height - margins.bottom - safeOffset) {
+      doc.addPage();
+      y = margins.top;
     }
 
     if (coach.sessions && coach.sessions.length > 0) {
@@ -785,15 +789,15 @@ async function renderCoachPDF(doc, coaches, margins) {
           .text(`${session.scheduleType} | ${new Date(session.date).toLocaleDateString('id-ID')} | ${session.time}`, 60, y + 3, { width: 300 })
           .text(`${session.programCategory}`, 380, y + 3, { width: 165 });
 
-        y += 16;
+        y += 14; // ✅ Reduced from 16
 
         doc.fillColor('#000').fontSize(6).font('Helvetica')
           .text(`Program: ${session.program} | Lokasi: ${session.location}`, 60, y);
-        y += 10;
+        y += 8; // ✅ Reduced from 10
 
         doc.fillColor('#0ea5e9').fontSize(6).font('Helvetica-Bold')
           .text(`Siswa: ${Array.isArray(session.students) ? session.students.length : session.studentCount}`, 60, y);
-        y += 10;
+        y += 8; // ✅ Reduced from 10
 
         if (session.evaluations && session.evaluations.length > 0) {
           doc.rect(50, y, doc.page.width - 100, 12).fill('#10b981');
@@ -811,8 +815,16 @@ async function renderCoachPDF(doc, coaches, margins) {
             }
 
             const bgColor = aidx % 2 === 0 ? '#f9fafb' : '#ffffff';
-            const noteLines = (athlete.notes || '').split('\n').length || 1;
-            const rowHeight = Math.max(12, noteLines * 8 + 2);
+
+            // ✅ FIX: Truncate notes and limit row height
+            const maxNoteLength = 150;
+            let displayNotes = (athlete.notes || '-').trim();
+            if (displayNotes.length > maxNoteLength) {
+              displayNotes = displayNotes.substring(0, maxNoteLength) + '...';
+            }
+
+            // ✅ Fixed row height (was dynamic based on note lines)
+            const rowHeight = 12;
 
             doc.rect(50, y, doc.page.width - 100, rowHeight).fill(bgColor);
 
@@ -821,9 +833,9 @@ async function renderCoachPDF(doc, coaches, margins) {
               .text(athlete.attendance, 165, y + 2, { width: 50 });
 
             doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-              .text(athlete.notes, 220, y + 2, {
+              .text(displayNotes, 220, y + 2, {
                 width: 325,
-                height: rowHeight - 4,
+                ellipsis: true,
                 align: 'left'
               });
 
@@ -831,11 +843,11 @@ async function renderCoachPDF(doc, coaches, margins) {
           });
         }
 
-        y += 6;
+        y += 4; // ✅ Reduced from 6
       });
     }
 
-    y += 10;
+    y += 8; // ✅ Reduced from 10
   });
 }
 
