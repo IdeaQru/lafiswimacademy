@@ -506,6 +506,32 @@ async function getFinancialExportData(startDate, endDate) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ PDF PAGE BREAK HELPER
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Check if content fits on current page and add page break if needed
+ * @param {Object} doc - PDFDocument instance
+ * @param {number} currentY - Current Y position
+ * @param {number} contentHeight - Height of content to add
+ * @param {Object} margins - Page margins
+ * @param {number} safeOffset - Safe offset from bottom
+ * @returns {number} - New Y position (either same or reset to top)
+ */
+function ensureSpaceForContent(doc, currentY, contentHeight, margins, safeOffset) {
+  const maxHeight = doc.page.height - margins.bottom - safeOffset;
+
+  if (currentY + contentHeight > maxHeight) {
+    // Content doesn't fit, add new page
+    doc.addPage();
+    return margins.top;
+  }
+
+  // Content fits, return current Y
+  return currentY;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ PDF EXPORT
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -706,21 +732,15 @@ async function renderStudentPDF(doc, data, margins) {
 // ==================== PDF RENDER: COACH ====================
 async function renderCoachPDF(doc, coaches, margins) {
   let y = 125;
-  const safeOffset = 60; // ✅ Increased from 40 to prevent edge cases
-  let pageCount = 1; // Track page count
+  const safeOffset = 55; // ✅ User requested: 55
+
   console.log(`🚀 Starting PDF generation with ${coaches.length} coaches`);
 
   coaches.forEach((coach, coachIdx) => {
-    console.log(`\n📊 Coach ${coachIdx + 1}/${coaches.length}: ${coach.name || coach.coachName}`);
-    console.log(`   Current Y: ${y}, Page height: ${doc.page.height}, Available: ${doc.page.height - margins.bottom - safeOffset}`);
-
-    if (y > doc.page.height - margins.bottom - safeOffset) {
-      console.log(`   🔄 PAGE BREAK for coach ${coachIdx + 1} (Y=${y} > ${doc.page.height - margins.bottom - safeOffset})`);
-      doc.addPage();
-      pageCount++;
-      console.log(`   📄 Total pages so far: ${pageCount}`);
-      y = margins.top;
-    }
+    // ===== COACH HEADER =====
+    // Estimate height needed for coach section
+    const statsHeight = (coach.scheduleTypeStats?.length || 0) * 12 + 50;
+    y = ensureSpaceForContent(doc, y, 45 + statsHeight, margins, safeOffset);
 
     doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
       .fillAndStroke('#f0fdf4', '#10b981');
@@ -728,169 +748,129 @@ async function renderCoachPDF(doc, coaches, margins) {
       .text(`${coach.name || coach.coachName || 'Unknown'} (${coach.id || coach.coachId || '-'})`, 70, y + 8);
     doc.fontSize(8).fillColor('#6b7280').font('Helvetica')
       .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 18);
-
     y += 45;
 
-    doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
-      .fillAndStroke('#f0fdf4', '#10b981');
-    doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold')
-      .text(`${coach.name || coach.coachName || 'Unknown'} (${coach.id || coach.coachId || '-'})`, 70, y + 8);
-    doc.fontSize(8).fillColor('#6b7280').font('Helvetica')
-      .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 18);
-
-    y += 45;
-
+    // ===== STATISTICS =====
     if (coach.scheduleTypeStats && coach.scheduleTypeStats.length > 0) {
       doc.fontSize(8).fillColor('#10b981').font('Helvetica-Bold')
         .text('STATISTIK SCHEDULE TYPE:', 60, y);
       y += 12;
 
+      // Table header
       doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981');
       doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
         .text('Schedule Type', 60, y + 3, { width: 200 })
         .text('Total', 265, y + 3, { width: 35 })
         .text('Selesai', 305, y + 3, { width: 35 })
-        .text('Bensin', 345, y + 3, { width: 35 }); // ✅ RENAME: Batal → Bensin
-
+        .text('Bensin', 345, y + 3, { width: 35 });
       y += 16;
 
+      // Stats rows
       coach.scheduleTypeStats.forEach((stat, i) => {
         const bgColor = i % 2 === 0 ? '#f0fdf4' : '#ffffff';
         doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
-
         doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-          .text(stat.type, 60, y + 2, { width: 200 }) // ✅ Use aggregated type (Private, Semi-Private, Group)
+          .text(stat.type, 60, y + 2, { width: 200 })
           .text(stat.total.toString(), 265, y + 2, { width: 35 })
           .text(stat.completed.toString(), 305, y + 2, { width: 35 })
-          .text(stat.cancelled.toString(), 345, y + 2, { width: 35 }); // ✅ Shows "Bensin" values
-
+          .text(stat.cancelled.toString(), 345, y + 2, { width: 35 });
         y += 12;
       });
 
-      // ✅ ADD TOTAL ROW
+      // TOTAL row
       const grandTotal = coach.scheduleTypeStats.reduce((sum, stat) => ({
         total: sum.total + stat.total,
         completed: sum.completed + stat.completed,
         cancelled: sum.cancelled + stat.cancelled
       }), { total: 0, completed: 0, cancelled: 0 });
 
-      doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981'); // Green background for TOTAL
+      doc.rect(50, y, doc.page.width - 100, 14).fill('#10b981');
       doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
         .text('TOTAL', 60, y + 3, { width: 200 })
         .text(grandTotal.total.toString(), 265, y + 3, { width: 35 })
         .text(grandTotal.completed.toString(), 305, y + 3, { width: 35 })
         .text(grandTotal.cancelled.toString(), 345, y + 3, { width: 35 });
-
-      y += 20; // ✅ Reduced spacing: was 16 + 8 = 24, now 20
+      y += 20;
     }
 
-    // ✅ Check page break before session list
-    if (y > doc.page.height - margins.bottom - safeOffset) {
-      doc.addPage();
-      y = margins.top;
-    }
-
+    // ===== SESSIONS =====
     if (coach.sessions && coach.sessions.length > 0) {
+      // Check if "DAFTAR SESI" header fits
+      y = ensureSpaceForContent(doc, y, 20, margins, safeOffset);
+
       doc.fontSize(8).fillColor('#0369a1').font('Helvetica-Bold')
         .text('DAFTAR SESI & EVALUASI SISWA:', 60, y);
       y += 12;
 
-      coach.sessions.forEach((session, sessionIdx) => {
-        console.log(`   📅 Session ${sessionIdx + 1}: Y=${y}, Type=${session.scheduleType}, Evaluations=${session.evaluations?.length || 0}`);
+      coach.sessions.forEach((session) => {
+        // Estimate session height
+        // Base: 14 (header) + 8 (program) + 8 (siswa) + 4 (spacing) = 34px
+        // With evals: 34 + 14 (table header) + 4 (after evals) + (evalCount * 12)
+        const evalCount = session.evaluations?.length || 0;
+        const sessionHeight = evalCount > 0
+          ? 52 + (evalCount * 12)
+          : 34;
 
-        if (y > doc.page.height - margins.bottom - safeOffset) {
-          console.log(`      🔄 PAGE BREAK for session ${sessionIdx + 1} (Y=${y} > ${doc.page.height - margins.bottom - safeOffset})`);
-          doc.addPage();
-          pageCount++;
-          console.log(`      📄 Total pages: ${pageCount}`);
-          y = margins.top;
-        }
+        // Check if session fits (including all evaluations)
+        y = ensureSpaceForContent(doc, y, sessionHeight, margins, safeOffset);
 
+        // Session header
         doc.rect(50, y, doc.page.width - 100, 14).fill('#e0f2fe');
         doc.fillColor('#0369a1').fontSize(6.5).font('Helvetica-Bold')
           .text(`${session.scheduleType} | ${new Date(session.date).toLocaleDateString('id-ID')} | ${session.time}`, 60, y + 3, { width: 300 })
           .text(`${session.programCategory}`, 380, y + 3, { width: 165 });
-
-        y += 14; // ✅ Reduced from 16
+        y += 14;
 
         doc.fillColor('#000').fontSize(6).font('Helvetica')
           .text(`Program: ${session.program} | Lokasi: ${session.location}`, 60, y);
-        y += 8; // ✅ Reduced from 10
+        y += 8;
 
         doc.fillColor('#0ea5e9').fontSize(6).font('Helvetica-Bold')
           .text(`Siswa: ${Array.isArray(session.students) ? session.students.length : session.studentCount}`, 60, y);
-        y += 8; // ✅ Reduced from 10
+        y += 8;
 
+        // Evaluations
         if (session.evaluations && session.evaluations.length > 0) {
+          // Table header
           doc.rect(50, y, doc.page.width - 100, 12).fill('#10b981');
           doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
             .text('Siswa', 60, y + 2, { width: 100 })
             .text('Kehadiran', 165, y + 2, { width: 50 })
             .text('Catatan', 220, y + 2, { width: 325 });
-
           y += 14;
 
-          // ✅ Check if ALL evaluations fit on current page BEFORE looping
-          const totalEvalHeight = session.evaluations.length * 12; // 12px per row
-          const needsPageBreak = y + totalEvalHeight > doc.page.height - margins.bottom - safeOffset;
-
-          console.log(`      📋 Evaluations: ${session.evaluations.length}, Total height: ${totalEvalHeight}px, Y=${y}, Available: ${doc.page.height - margins.bottom - safeOffset}`);
-
-          if (needsPageBreak && session.evaluations.length > 0) {
-            console.log(`      🔄 PAGE BREAK for evaluations (Y=${y} + ${totalEvalHeight} = ${y + totalEvalHeight} > ${doc.page.height - margins.bottom - safeOffset})`);
-            doc.addPage();
-            pageCount++;
-            console.log(`      📄 Total pages: ${pageCount}`);
-            y = margins.top;
-
-            // Re-render table header on new page
-            doc.rect(50, y, doc.page.width - 100, 12).fill('#10b981');
-            doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
-              .text('Siswa', 60, y + 2, { width: 100 })
-              .text('Kehadiran', 165, y + 2, { width: 50 })
-              .text('Catatan', 220, y + 2, { width: 325 });
-            y += 14;
-          } else {
-            console.log(`      ✅ Evaluations fit on current page`);
-          }
-
-          // ✅ Render all evaluations WITHOUT per-item page breaks
+          // Render all evaluations
           session.evaluations.forEach((athlete, aidx) => {
             const bgColor = aidx % 2 === 0 ? '#f9fafb' : '#ffffff';
 
-            // ✅ FIX: Truncate notes and limit row height
+            // Truncate notes
             const maxNoteLength = 150;
             let displayNotes = (athlete.notes || '-').trim();
             if (displayNotes.length > maxNoteLength) {
               displayNotes = displayNotes.substring(0, maxNoteLength) + '...';
             }
 
-            // ✅ Fixed row height (was dynamic based on note lines)
-            const rowHeight = 12;
-
-            doc.rect(50, y, doc.page.width - 100, rowHeight).fill(bgColor);
-
+            // Render row
+            doc.rect(50, y, doc.page.width - 100, 12).fill(bgColor);
             doc.fillColor('#000').fontSize(5.5).font('Helvetica')
               .text(athlete.studentName, 60, y + 2, { width: 100 })
-              .text(athlete.attendance, 165, y + 2, { width: 50 });
+              .text(athlete.attendance, 165, y + 2, { width: 50 })
+              .text(displayNotes, 220, y + 2, { width: 325, ellipsis: true, align: 'left' });
 
-            doc.fillColor('#000').fontSize(5.5).font('Helvetica')
-              .text(displayNotes, 220, y + 2, {
-                width: 325,
-                ellipsis: true,
-                align: 'left'
-              });
-
-            y += rowHeight;
+            y += 12;
           });
+
+          y += 4;
         }
 
-        y += 4; // ✅ Reduced from 6
+        y += 4;
       });
     }
 
-    y += 8; // ✅ Reduced from 10
+    y += 8;
   });
+
+  console.log(`✅ PDF generation completed`);
 }
 
 // ==================== PDF RENDER: FINANCIAL ====================
