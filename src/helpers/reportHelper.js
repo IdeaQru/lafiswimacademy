@@ -707,12 +707,29 @@ async function renderStudentPDF(doc, data, margins) {
 async function renderCoachPDF(doc, coaches, margins) {
   let y = 125;
   const safeOffset = 60; // ✅ Increased from 40 to prevent edge cases
+  let pageCount = 1; // Track page count
+  console.log(`🚀 Starting PDF generation with ${coaches.length} coaches`);
 
-  coaches.forEach(coach => {
+  coaches.forEach((coach, coachIdx) => {
+    console.log(`\n📊 Coach ${coachIdx + 1}/${coaches.length}: ${coach.name || coach.coachName}`);
+    console.log(`   Current Y: ${y}, Page height: ${doc.page.height}, Available: ${doc.page.height - margins.bottom - safeOffset}`);
+
     if (y > doc.page.height - margins.bottom - safeOffset) {
+      console.log(`   🔄 PAGE BREAK for coach ${coachIdx + 1} (Y=${y} > ${doc.page.height - margins.bottom - safeOffset})`);
       doc.addPage();
+      pageCount++;
+      console.log(`   📄 Total pages so far: ${pageCount}`);
       y = margins.top;
     }
+
+    doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
+      .fillAndStroke('#f0fdf4', '#10b981');
+    doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold')
+      .text(`${coach.name || coach.coachName || 'Unknown'} (${coach.id || coach.coachId || '-'})`, 70, y + 8);
+    doc.fontSize(8).fillColor('#6b7280').font('Helvetica')
+      .text(`Total Sesi: ${coach.totalSessions}`, 400, y + 18);
+
+    y += 45;
 
     doc.roundedRect(50, y, doc.page.width - 100, 35, 5)
       .fillAndStroke('#f0fdf4', '#10b981');
@@ -778,9 +795,14 @@ async function renderCoachPDF(doc, coaches, margins) {
         .text('DAFTAR SESI & EVALUASI SISWA:', 60, y);
       y += 12;
 
-      coach.sessions.forEach(session => {
+      coach.sessions.forEach((session, sessionIdx) => {
+        console.log(`   📅 Session ${sessionIdx + 1}: Y=${y}, Type=${session.scheduleType}, Evaluations=${session.evaluations?.length || 0}`);
+
         if (y > doc.page.height - margins.bottom - safeOffset) {
+          console.log(`      🔄 PAGE BREAK for session ${sessionIdx + 1} (Y=${y} > ${doc.page.height - margins.bottom - safeOffset})`);
           doc.addPage();
+          pageCount++;
+          console.log(`      📄 Total pages: ${pageCount}`);
           y = margins.top;
         }
 
@@ -812,8 +834,13 @@ async function renderCoachPDF(doc, coaches, margins) {
           const totalEvalHeight = session.evaluations.length * 12; // 12px per row
           const needsPageBreak = y + totalEvalHeight > doc.page.height - margins.bottom - safeOffset;
 
+          console.log(`      📋 Evaluations: ${session.evaluations.length}, Total height: ${totalEvalHeight}px, Y=${y}, Available: ${doc.page.height - margins.bottom - safeOffset}`);
+
           if (needsPageBreak && session.evaluations.length > 0) {
+            console.log(`      🔄 PAGE BREAK for evaluations (Y=${y} + ${totalEvalHeight} = ${y + totalEvalHeight} > ${doc.page.height - margins.bottom - safeOffset})`);
             doc.addPage();
+            pageCount++;
+            console.log(`      📄 Total pages: ${pageCount}`);
             y = margins.top;
 
             // Re-render table header on new page
@@ -823,6 +850,8 @@ async function renderCoachPDF(doc, coaches, margins) {
               .text('Kehadiran', 165, y + 2, { width: 50 })
               .text('Catatan', 220, y + 2, { width: 325 });
             y += 14;
+          } else {
+            console.log(`      ✅ Evaluations fit on current page`);
           }
 
           // ✅ Render all evaluations WITHOUT per-item page breaks
