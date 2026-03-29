@@ -657,7 +657,7 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
 // ==================== PDF RENDER: STUDENT ====================
 async function renderStudentPDF(doc, data, margins) {
   let y = 125;
-  const safeOffset = 40;
+  const safeOffset = 60; // ✅ Increased from 40 to prevent edge cases
 
   doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
     .fillAndStroke('#f0f9ff', '#0ea5e9');
@@ -706,7 +706,7 @@ async function renderStudentPDF(doc, data, margins) {
 // ==================== PDF RENDER: COACH ====================
 async function renderCoachPDF(doc, coaches, margins) {
   let y = 125;
-  const safeOffset = 40;
+  const safeOffset = 60; // ✅ Increased from 40 to prevent edge cases
 
   coaches.forEach(coach => {
     if (y > doc.page.height - margins.bottom - safeOffset) {
@@ -808,14 +808,25 @@ async function renderCoachPDF(doc, coaches, margins) {
 
           y += 14;
 
-          session.evaluations.forEach((athlete, aidx) => {
-            if (y > doc.page.height - margins.bottom - safeOffset) {
-              console.log(`🔄 Page break at evaluation ${aidx + 1}/${session.evaluations.length}, y=${y}, page.height=${doc.page.height}, margins.bottom=${margins.bottom}, safeOffset=${safeOffset}`);
-              doc.addPage();
-              y = margins.top;
-              console.log(`✅ New page started, y reset to ${y}`);
-            }
+          // ✅ Check if ALL evaluations fit on current page BEFORE looping
+          const totalEvalHeight = session.evaluations.length * 12; // 12px per row
+          const needsPageBreak = y + totalEvalHeight > doc.page.height - margins.bottom - safeOffset;
 
+          if (needsPageBreak && session.evaluations.length > 0) {
+            doc.addPage();
+            y = margins.top;
+
+            // Re-render table header on new page
+            doc.rect(50, y, doc.page.width - 100, 12).fill('#10b981');
+            doc.fillColor('#fff').fontSize(6).font('Helvetica-Bold')
+              .text('Siswa', 60, y + 2, { width: 100 })
+              .text('Kehadiran', 165, y + 2, { width: 50 })
+              .text('Catatan', 220, y + 2, { width: 325 });
+            y += 14;
+          }
+
+          // ✅ Render all evaluations WITHOUT per-item page breaks
+          session.evaluations.forEach((athlete, aidx) => {
             const bgColor = aidx % 2 === 0 ? '#f9fafb' : '#ffffff';
 
             // ✅ FIX: Truncate notes and limit row height
@@ -856,7 +867,7 @@ async function renderCoachPDF(doc, coaches, margins) {
 // ==================== PDF RENDER: FINANCIAL ====================
 async function renderFinancialPDF(doc, data, margins) {
   let y = 125;
-  const safeOffset = 40;
+  const safeOffset = 60; // ✅ Increased from 40 to prevent edge cases
 
   doc.roundedRect(50, y, doc.page.width - 100, 65, 5)
     .fillAndStroke('#fef3c7', '#f59e0b');
