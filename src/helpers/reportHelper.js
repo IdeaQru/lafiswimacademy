@@ -539,9 +539,6 @@ function ensureSpaceForContent(doc, currentY, contentHeight, margins, safeOffset
  * Generate front page showing coach attendance summary for the month
  */
 async function renderCoachFrontPage(doc, coaches, startDate, endDate, margins) {
-  // Add new page for front/cover page
-  doc.addPage();
-
   // Title section
   doc.fillColor('#0ea5e9').fontSize(20).font('Helvetica-Bold')
     .text('LAPORAN ABSENSI PELATIH', doc.page.width / 2 - 150, 80, { width: 300, align: 'center' });
@@ -819,6 +816,9 @@ async function renderStudentPDF(doc, data, margins) {
 
 // ==================== PDF RENDER: COACH ====================
 async function renderCoachPDF(doc, coaches, margins) {
+  // Start on a new page after the front page
+  doc.addPage();
+
   let y = 125;
   const safeOffset = 55; // ✅ User requested: 55
 
