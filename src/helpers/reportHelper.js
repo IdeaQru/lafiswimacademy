@@ -532,6 +532,91 @@ function ensureSpaceForContent(doc, currentY, contentHeight, margins, safeOffset
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// ✅ COACH ATTENDANCE FRONT PAGE
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Generate front page showing coach attendance summary for the month
+ */
+async function renderCoachFrontPage(doc, coaches, startDate, endDate, margins) {
+  // Add new page for front/cover page
+  doc.addPage();
+
+  // Title section
+  doc.fillColor('#0ea5e9').fontSize(20).font('Helvetica-Bold')
+    .text('LAPORAN ABSENSI PELATIH', doc.page.width / 2 - 150, 80, { width: 300, align: 'center' });
+
+  doc.fillColor('#64748b').fontSize(10).font('Helvetica')
+    .text(`Periode: ${new Date(startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} - ${new Date(endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+    doc.page.width / 2 - 150, 110, { width: 300, align: 'center' });
+
+  let y = 160;
+
+  // Render each coach summary
+  coaches.forEach((coach, index) => {
+    // Check if we need a new page
+    if (y > doc.page.height - margins.bottom - 100) {
+      doc.addPage();
+      y = margins.top;
+    }
+
+    // Coach card background
+    doc.roundedRect(50, y, doc.page.width - 100, 80, 8)
+      .fillAndStroke('#f0fdf4', '#10b981');
+
+    // Coach name
+    doc.fillColor('#10b981').fontSize(12).font('Helvetica-Bold')
+      .text(`${coach.name || coach.coachName || 'Unknown'}`, 70, y + 12);
+
+    doc.fillColor('#64748b').fontSize(8).font('Helvetica')
+      .text(`ID: ${coach.id || coach.coachId || '-'}`, 70, y + 28);
+
+    // Get statistics by schedule type
+    const privateStats = coach.scheduleTypeStats?.find(s => s.type === 'Private') || { total: 0, completed: 0, cancelled: 0 };
+    const semiPrivateStats = coach.scheduleTypeStats?.find(s => s.type === 'Semi-Private') || { total: 0, completed: 0, cancelled: 0 };
+    const groupStats = coach.scheduleTypeStats?.find(s => s.type === 'Group') || { total: 0, completed: 0, cancelled: 0 };
+    const totalCancelled = (privateStats.cancelled || 0) + (semiPrivateStats.cancelled || 0) + (groupStats.cancelled || 0);
+
+    // Statistics grid
+    const startX = 70;
+    const startY = y + 45;
+    const colWidth = 110;
+    const rowHeight = 28;
+
+    // Private
+    doc.rect(startX, startY, colWidth - 10, rowHeight).fill('#dbeafe');
+    doc.fillColor('#0369a1').fontSize(8).font('Helvetica-Bold')
+      .text('Private', startX + 5, startY + 5)
+      .fontSize(14).text((privateStats.completed || 0).toString(), startX + 5, startY + 15);
+
+    // Semi-Private
+    doc.rect(startX + colWidth, startY, colWidth - 10, rowHeight).fill('#fef3c7');
+    doc.fillColor('#b45309').fontSize(8).font('Helvetica-Bold')
+      .text('Semi-Private', startX + colWidth + 5, startY + 5)
+      .fontSize(14).text((semiPrivateStats.completed || 0).toString(), startX + colWidth + 5, startY + 15);
+
+    // Group
+    doc.rect(startX + colWidth * 2, startY, colWidth - 10, rowHeight).fill('#dcfce7');
+    doc.fillColor('#047857').fontSize(8).font('Helvetica-Bold')
+      .text('Group', startX + colWidth * 2 + 5, startY + 5)
+      .fontSize(14).text((groupStats.completed || 0).toString(), startX + colWidth * 2 + 5, startY + 15);
+
+    // Bensin (Cancelled)
+    doc.rect(startX + colWidth * 3, startY, colWidth - 10, rowHeight).fill('#fee2e2');
+    doc.fillColor('#dc2626').fontSize(8).font('Helvetica-Bold')
+      .text('Bensin', startX + colWidth * 3 + 5, startY + 5)
+      .fontSize(14).text(totalCancelled.toString(), startX + colWidth * 3 + 5, startY + 15);
+
+    y += 95;
+  });
+
+  // Add footer note
+  y = doc.page.height - margins.bottom - 30;
+  doc.fillColor('#94a3b8').fontSize(7).font('Helvetica')
+    .text('* Bensin = Jumlah sesi yang dibatalkan oleh siswa pada hari H atau H-3', 50, y, { width: doc.page.width - 100, align: 'center' });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════
 // ✅ PDF EXPORT
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -614,6 +699,9 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
     if (reportType === 'student-individual') {
       await renderStudentPDF(doc, data, margins);
     } else if (reportType === 'coach') {
+      // ✅ Add front page with coach attendance summary
+      await renderCoachFrontPage(doc, data.coaches, startDate, endDate, margins);
+      // Then render detailed coach report
       await renderCoachPDF(doc, data.coaches, margins);
     } else if (reportType === 'financial') {
       await renderFinancialPDF(doc, data, margins);
