@@ -691,16 +691,19 @@ async function exportToPDFBeautiful(res, title, data, reportType, startDate, end
     doc.fillColor('#000000');
 
     // ==================== CONTENT AREA ====================
-    doc.moveDown(3);
-
     if (reportType === 'student-individual') {
+      doc.moveDown(3);
       await renderStudentPDF(doc, data, margins);
     } else if (reportType === 'coach') {
+      // ✅ For coach reports, skip to a new page to avoid double header
+      // The main header is on page 1, so we start fresh on page 2 for front page
+      doc.addPage();
       // ✅ Add front page with coach attendance summary
       await renderCoachFrontPage(doc, data.coaches, startDate, endDate, margins);
       // Then render detailed coach report
       await renderCoachPDF(doc, data.coaches, margins);
     } else if (reportType === 'financial') {
+      doc.moveDown(3);
       await renderFinancialPDF(doc, data, margins);
     }
 
