@@ -584,19 +584,19 @@ async function renderCoachFrontPage(doc, coaches, startDate, endDate, margins) {
     doc.rect(startX, startY, colWidth - 10, rowHeight).fill('#dbeafe');
     doc.fillColor('#0369a1').fontSize(8).font('Helvetica-Bold')
       .text('Private', startX + 5, startY + 5)
-      .fontSize(14).text((privateStats.completed || 0).toString(), startX + 5, startY + 15);
+      .fontSize(14).text((privateStats.total || 0).toString(), startX + 5, startY + 15);
 
     // Semi-Private
     doc.rect(startX + colWidth, startY, colWidth - 10, rowHeight).fill('#fef3c7');
     doc.fillColor('#b45309').fontSize(8).font('Helvetica-Bold')
       .text('Semi-Private', startX + colWidth + 5, startY + 5)
-      .fontSize(14).text((semiPrivateStats.completed || 0).toString(), startX + colWidth + 5, startY + 15);
+      .fontSize(14).text((semiPrivateStats.total || 0).toString(), startX + colWidth + 5, startY + 15);
 
     // Group
     doc.rect(startX + colWidth * 2, startY, colWidth - 10, rowHeight).fill('#dcfce7');
     doc.fillColor('#047857').fontSize(8).font('Helvetica-Bold')
       .text('Group', startX + colWidth * 2 + 5, startY + 5)
-      .fontSize(14).text((groupStats.completed || 0).toString(), startX + colWidth * 2 + 5, startY + 15);
+      .fontSize(14).text((groupStats.total || 0).toString(), startX + colWidth * 2 + 5, startY + 15);
 
     // Bensin (Cancelled)
     doc.rect(startX + colWidth * 3, startY, colWidth - 10, rowHeight).fill('#fee2e2');
